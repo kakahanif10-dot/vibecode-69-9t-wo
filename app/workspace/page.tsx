@@ -8,6 +8,8 @@ import {
 import { WorkspaceTopnav } from '@/components/workspace/workspace-topnav'
 import { ChatPanel, type ChatMessage } from '@/components/workspace/chat-panel'
 import { PreviewPanel } from '@/components/workspace/preview-panel'
+import { ApkLoadingOverlay } from '@/components/workspace/apk-loading-overlay'
+import { AnimatePresence } from 'framer-motion'
 
 const PROJECTS: Project[] = [
   { id: 'p1', name: 'Cloudpour Coffee', updated: 'Edited just now' },
@@ -43,6 +45,7 @@ export default function WorkspacePage() {
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
   const [generating, setGenerating] = useState(false)
+  const [generatingApk, setGeneratingApk] = useState(false)
   const [built, setBuilt] = useState(true)
   const [deployState, setDeployState] = useState<
     'idle' | 'deploying' | 'deployed'
@@ -79,6 +82,60 @@ export default function WorkspacePage() {
     }, 2400)
   }
 
+  const handleGenerateApk = async () => {
+    const userPrompt = input.trim()
+    if (!userPrompt || generatingApk || generating) return
+
+    const userMsg: ChatMessage = {
+      id: `u${idCounter++}`,
+      role: 'user',
+      content: userPrompt,
+    }
+    setMessages((m) => [...m, userMsg])
+    setInput('')
+    setGeneratingApk(true)
+
+    try {
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userPrompt }),
+      })
+      const data = await res.json()
+
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || data?.message || 'Generation failed')
+      }
+
+      setMessages((m) => [
+        ...m,
+        {
+          id: `a${idCounter++}`,
+          role: 'assistant',
+          content:
+            'Native APK berhasil dirakit. Berikut kode React Native (Expo) untuk App.js:',
+          code: data.generatedCode,
+          steps: [
+            'Menganalisis prompt',
+            'Merakit kode React Native (Expo)',
+            'APK siap diunduh',
+          ],
+        },
+      ])
+    } catch (err) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: `a${idCounter++}`,
+          role: 'assistant',
+          content: `Gagal merakit APK: ${(err as Error).message}. Silakan coba lagi.`,
+        },
+      ])
+    } finally {
+      setGeneratingApk(false)
+    }
+  }
+
   const handleNew = () => {
     setMessages([])
     setBuilt(false)
@@ -113,14 +170,19 @@ export default function WorkspacePage() {
         />
 
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,420px)_1fr]">
-          <div className="min-h-0 border-r border-border">
+          <div className="relative min-h-0 border-r border-border">
             <ChatPanel
               messages={messages}
               input={input}
               onInputChange={setInput}
               onSend={handleSend}
+              onGenerateApk={handleGenerateApk}
               generating={generating}
+              generatingApk={generatingApk}
             />
+            <AnimatePresence>
+              {generatingApk && <ApkLoadingOverlay />}
+            </AnimatePresence>
           </div>
           <div className="hidden min-h-0 lg:block">
             <PreviewPanel building={generating && !built} built={built} />

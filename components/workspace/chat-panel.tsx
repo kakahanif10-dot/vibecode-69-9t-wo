@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowUp, Paperclip, Sparkles } from 'lucide-react'
+import { ArrowUp, Paperclip, Smartphone, Sparkles } from 'lucide-react'
 import { VibecodeMark } from '@/components/vibecode-logo'
 import { cn } from '@/lib/utils'
 
@@ -11,6 +11,7 @@ export type ChatMessage = {
   role: 'user' | 'assistant'
   content: string
   steps?: string[]
+  code?: string
 }
 
 export function ChatPanel({
@@ -18,13 +19,17 @@ export function ChatPanel({
   input,
   onInputChange,
   onSend,
+  onGenerateApk,
   generating,
+  generatingApk,
 }: {
   messages: ChatMessage[]
   input: string
   onInputChange: (v: string) => void
   onSend: () => void
+  onGenerateApk: () => void
   generating: boolean
+  generatingApk: boolean
 }) {
   const endRef = useRef<HTMLDivElement>(null)
 
@@ -94,7 +99,7 @@ export function ChatPanel({
             </button>
             <button
               onClick={onSend}
-              disabled={!input.trim() || generating}
+              disabled={!input.trim() || generating || generatingApk}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-secondary text-secondary-foreground transition-opacity hover:opacity-90 disabled:opacity-40"
               aria-label="Send message"
             >
@@ -102,6 +107,15 @@ export function ChatPanel({
             </button>
           </div>
         </div>
+
+        <button
+          onClick={onGenerateApk}
+          disabled={!input.trim() || generating || generatingApk}
+          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-foreground px-4 py-2.5 text-sm font-semibold tracking-wide text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Smartphone className="h-4 w-4" />
+          GENERATE NATIVE APK
+        </button>
       </div>
     </div>
   )
@@ -132,6 +146,11 @@ function Message({ message }: { message: ChatMessage }) {
         >
           {message.content}
         </div>
+        {message.code && (
+          <pre className="mt-2 max-h-72 overflow-auto rounded-xl border border-border bg-card/70 p-3 text-left font-mono text-xs leading-relaxed text-foreground">
+            <code>{message.code}</code>
+          </pre>
+        )}
         {message.steps && message.steps.length > 0 && (
           <ul className="mt-2 space-y-1.5 text-left">
             {message.steps.map((s) => (
