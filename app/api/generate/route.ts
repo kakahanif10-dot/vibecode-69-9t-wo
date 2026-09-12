@@ -1,14 +1,14 @@
 // VIBECODE INC. (c) 2026 — Universal App Generator engine
 
-import { generateText } from 'ai'
-
 export const maxDuration = 60
 
-// Routed through the Vercel AI Gateway (zero-config auth in v0 previews and Vercel
-// deployments — no provider API key needed). Model IDs use the `provider/model` form.
-const MODEL = 'google/gemini-2.5-flash'
-// Ordered list of models to try when the primary is overloaded or rate-limited.
-const MODEL_FALLBACKS = ['google/gemini-2.5-flash', 'google/gemini-2.5-flash-lite'] as const
+// Google Gemini free-tier, called directly (bypasses Vercel AI Gateway — no card needed).
+// The API key is read server-side only from GOOGLE_GENERATIVE_AI_API_KEY and never sent to the browser.
+const MODEL = 'gemini-flash-latest'
+// Ordered list of free-tier models to try when the primary is overloaded (503) or rate-limited (429).
+const MODEL_FALLBACKS = ['gemini-flash-latest', 'gemini-flash-lite-latest'] as const
+const endpointFor = (model: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
 const APP_TYPES = ['mobile', 'saas', 'landing', 'ecommerce'] as const
 const COLOR_SCHEMES = [
@@ -87,81 +87,85 @@ function toFeatures(value: unknown): string[] {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
+// Transient upstream statuses worth retrying: overloaded, rate-limited, gateway hiccups.
+const RETRYABLE = new Set([429, 500, 502, 503, 504])
+
 class OverloadedError extends Error {}
 
-// Heuristic: is this a transient/overload error worth retrying or falling back on?
-function isTransient(err: unknown): boolean {
-  const status =
-    typeof (err as { statusCode?: number })?.statusCode === 'number'
-      ? (err as { statusCode: number }).statusCode
-      : undefined
-  if (status && [429, 500, 502, 503, 504].includes(status)) return true
-  const msg = (err as Error)?.message?.toLowerCase() ?? ''
-  return (
-    msg.includes('overload') ||
-    msg.includes('rate limit') ||
-    msg.includes('unavailable') ||
-    msg.includes('timeout') ||
-    msg.includes('503') ||
-    msg.includes('429')
-  )
-}
-
-// Try one model via the AI Gateway, retrying transient errors with exponential backoff.
+// Try one model, retrying transient errors with exponential backoff.
 async function requestModel(
   model: string,
+  apiKey: string,
   userPrompt: string,
   attempts = 3,
 ): Promise<string> {
-  let lastErr: unknown = null
+  let lastStatus = 0
   for (let attempt = 0; attempt < attempts; attempt++) {
-    try {
-      const { text } = await generateText({
-        model,
-        system: SYSTEM_INSTRUCTION,
-        prompt: userPrompt,
-      })
-      return text
-    } catch (err) {
-      lastErr = err
-      if (isTransient(err)) {
-        // Back off (250ms, 500ms, 1s...) before retrying the same model.
-        if (attempt < attempts - 1) await sleep(250 * 2 ** attempt)
-        continue
-      }
-      // Non-transient — fail fast.
-      throw err
+    const res = await fetch(endpointFor(model), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Send the key as a header, not a query param, so it never lands in request/URL logs.
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { responseMimeType: 'application/json' },
+      }),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      return (
+        data?.candidates?.[0]?.content?.parts
+          ?.map((p: { text?: string }) => p?.text ?? '')
+          .join('') ?? ''
+      )
     }
+
+    lastStatus = res.status
+    const detail = await res.text().catch(() => '')
+
+    if (RETRYABLE.has(res.status)) {
+      // Back off (250ms, 500ms, 1s...) before retrying the same model.
+      if (attempt < attempts - 1) await sleep(250 * 2 ** attempt)
+      continue
+    }
+
+    // Non-transient (e.g. 400/401/404) — fail fast, keep key out of the text.
+    throw new Error(
+      `Gemini API error (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`,
+    )
   }
-  // Exhausted retries for this model with a transient error.
-  throw new OverloadedError(
-    `Model "${model}" unavailable${
-      (lastErr as Error)?.message ? `: ${(lastErr as Error).message}` : ''
-    }`,
-  )
+  // Exhausted retries for this model with a transient status.
+  throw new OverloadedError(`Model "${model}" unavailable (${lastStatus})`)
 }
 
-// Generate the app spec via the AI Gateway, falling back across models when overloaded.
+// Call Gemini's REST API directly, falling back across free-tier models when overloaded.
 async function callGemini(userPrompt: string): Promise<string> {
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) {
+    throw new Error(
+      'GOOGLE_GENERATIVE_AI_API_KEY is not set on the server. Add it in Project Settings → Environment Variables.',
+    )
+  }
+
   let overloaded: OverloadedError | null = null
   for (const model of MODEL_FALLBACKS) {
     try {
-      return await requestModel(model, userPrompt)
+      return await requestModel(model, apiKey, userPrompt)
     } catch (err) {
       // Only advance to the next model on transient/overload failures.
       if (err instanceof OverloadedError) {
         overloaded = err
         continue
       }
-      if (isTransient(err)) {
-        overloaded = new OverloadedError((err as Error).message)
-        continue
-      }
       throw err
     }
   }
   throw new OverloadedError(
-    overloaded?.message ?? 'All models are currently overloaded.',
+    overloaded?.message ?? 'All Gemini models are currently overloaded.',
   )
 }
 
