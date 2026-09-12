@@ -1,15 +1,65 @@
-// VIBECODE INC. (c) 2026 - ARCHITECTED BY KAKA
+// VIBECODE INC. (c) 2026 — Layer 3 design engine
 import { generateText } from 'ai'
 
 export const maxDuration = 60
 
-const SYSTEM_INSTRUCTION = `Anda adalah mesin rekayasa inti dari Vibecode Inc. Hasilkan HANYA kode JavaScript/TypeScript fungsional utuh React Native (Expo) yang siap dimasukkan ke file 'App.js'. JANGAN berikan penjelasan teks apa pun di luar kode. JANGAN gunakan markdown block.`
+// Gemini 3.6 Flash via Vercel AI Gateway (zero-config auth in v0 previews + Vercel).
+const MODEL = 'google/gemini-3.6-flash'
+
+const SYSTEM_INSTRUCTION = `You are the Layer 3 design engine for Vibecode Inc.
+The user describes an apparel / app-brand idea in any language.
+Return ONLY a single minified JSON object (no markdown, no prose, no code fences) with EXACTLY these keys:
+{
+  "appName": string,        // short brand name, max 22 chars
+  "garment": "tshirt" | "hoodie" | "tank",
+  "garmentColor": string,   // hex like "#111111"
+  "textColor": string,      // hex with strong contrast against garmentColor
+  "slogan": string,         // 1-4 words printed on the garment, uppercase
+  "description": string     // one friendly sentence describing the design
+}
+Pick colors that actually contrast. Keep slogan short enough to print on a chest.`
+
+type DesignSpec = {
+  appName: string
+  garment: 'tshirt' | 'hoodie' | 'tank'
+  garmentColor: string
+  textColor: string
+  slogan: string
+  description: string
+}
+
+function extractJson(raw: string): DesignSpec | null {
+  const cleaned = raw
+    .replace(/```json/gi, '')
+    .replace(/```/g, '')
+    .trim()
+  const start = cleaned.indexOf('{')
+  const end = cleaned.lastIndexOf('}')
+  if (start === -1 || end === -1 || end <= start) return null
+  try {
+    const parsed = JSON.parse(cleaned.slice(start, end + 1))
+    if (!parsed || typeof parsed !== 'object') return null
+    return parsed as DesignSpec
+  } catch {
+    return null
+  }
+}
+
+const GARMENTS = new Set(['tshirt', 'hoodie', 'tank'])
+const HEX = /^#?[0-9a-fA-F]{6}$/
+
+function normalizeHex(value: unknown, fallback: string): string {
+  if (typeof value !== 'string' || !HEX.test(value.trim())) return fallback
+  const v = value.trim()
+  return v.startsWith('#') ? v : `#${v}`
+}
 
 export async function POST(req: Request) {
   let userPrompt = ''
   try {
     const body = await req.json()
-    userPrompt = typeof body?.userPrompt === 'string' ? body.userPrompt.trim() : ''
+    userPrompt =
+      typeof body?.userPrompt === 'string' ? body.userPrompt.trim() : ''
   } catch {
     return Response.json(
       { success: false, message: 'Invalid JSON body' },
@@ -26,16 +76,45 @@ export async function POST(req: Request) {
 
   try {
     const { text } = await generateText({
-      model: 'google/gemini-3.8-flash',
+      model: MODEL,
       system: SYSTEM_INSTRUCTION,
       prompt: userPrompt,
     })
 
+    const parsed = extractJson(text)
+    if (!parsed) {
+      return Response.json(
+        { success: false, error: 'Model did not return a valid design spec.' },
+        { status: 502 },
+      )
+    }
+
+    const spec: DesignSpec = {
+      appName:
+        typeof parsed.appName === 'string' && parsed.appName.trim()
+          ? parsed.appName.trim().slice(0, 22)
+          : 'Vibewear',
+      garment:
+        typeof parsed.garment === 'string' && GARMENTS.has(parsed.garment)
+          ? parsed.garment
+          : 'tshirt',
+      garmentColor: normalizeHex(parsed.garmentColor, '#111111'),
+      textColor: normalizeHex(parsed.textColor, '#ffffff'),
+      slogan:
+        typeof parsed.slogan === 'string' && parsed.slogan.trim()
+          ? parsed.slogan.trim().toUpperCase().slice(0, 24)
+          : 'VIBECODE',
+      description:
+        typeof parsed.description === 'string' && parsed.description.trim()
+          ? parsed.description.trim()
+          : 'A clean, original apparel concept generated on Layer 3.',
+    }
+
     return Response.json({
       success: true,
-      author: 'Kaka (Solo Pioneer)',
       company: 'Vibecode Inc.',
-      generatedCode: text,
+      model: MODEL,
+      spec,
     })
   } catch (error) {
     return Response.json(
