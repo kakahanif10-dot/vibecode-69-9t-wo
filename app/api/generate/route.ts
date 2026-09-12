@@ -1,4 +1,4 @@
-// VIBECODE INC. (c) 2026 — Layer 3 design engine
+// VIBECODE INC. (c) 2026 — Universal App Generator engine
 
 export const maxDuration = 60
 
@@ -7,29 +7,43 @@ export const maxDuration = 60
 const MODEL = 'gemini-flash-latest'
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`
 
-const SYSTEM_INSTRUCTION = `You are the Layer 3 design engine for Vibecode Inc.
-The user describes an apparel / app-brand idea in any language.
+const APP_TYPES = ['mobile', 'saas', 'landing', 'ecommerce'] as const
+const COLOR_SCHEMES = [
+  'monochrome',
+  'cyberpunk',
+  'enterprise',
+  'emerald',
+] as const
+
+type AppType = (typeof APP_TYPES)[number]
+type ColorScheme = (typeof COLOR_SCHEMES)[number]
+
+const SYSTEM_INSTRUCTION = `You are the generation engine for Vibecode Inc., a UNIVERSAL multi-app generator.
+The user describes any kind of software product in any language (a university portal, a coffee-shop menu, a medical/clinic app, a SaaS dashboard, a landing page, an online store, etc.).
 Return ONLY a single minified JSON object (no markdown, no prose, no code fences) with EXACTLY these keys:
 {
-  "appName": string,        // short brand name, max 22 chars
-  "garment": "tshirt" | "hoodie" | "tank",
-  "garmentColor": string,   // hex like "#111111"
-  "textColor": string,      // hex with strong contrast against garmentColor
-  "slogan": string,         // 1-4 words printed on the garment, uppercase
-  "description": string     // one friendly sentence describing the design
+  "appName": string,        // short product/brand name, max 22 chars, derived from the idea
+  "appType": "mobile" | "saas" | "landing" | "ecommerce",  // best fit for the described product
+  "colorScheme": "monochrome" | "cyberpunk" | "enterprise" | "emerald",  // best fit for the brand/mood
+  "tagline": string,        // punchy hero headline, max 48 chars
+  "description": string,    // one friendly sentence describing the product
+  "features": string[],     // exactly 4 short labels (2-3 words each) — screens, sections, menu items or stats that fit the product
+  "primaryAction": string   // main call-to-action button label, 1-3 words (e.g. "Enroll now", "Order coffee", "Book appointment")
 }
-Pick colors that actually contrast. Keep slogan short enough to print on a chest.`
+Choose appType and colorScheme that genuinely match the described product. Keep everything concise so it renders inside a device preview.`
 
 type DesignSpec = {
   appName: string
-  garment: 'tshirt' | 'hoodie' | 'tank'
-  garmentColor: string
-  textColor: string
-  slogan: string
+  appType: AppType
+  colorScheme: ColorScheme
+  tagline: string
   description: string
+  features: string[]
+  primaryAction: string
+  hasContent: boolean
 }
 
-function extractJson(raw: string): DesignSpec | null {
+function extractJson(raw: string): Record<string, unknown> | null {
   const cleaned = raw
     .replace(/```json/gi, '')
     .replace(/```/g, '')
@@ -40,19 +54,32 @@ function extractJson(raw: string): DesignSpec | null {
   try {
     const parsed = JSON.parse(cleaned.slice(start, end + 1))
     if (!parsed || typeof parsed !== 'object') return null
-    return parsed as DesignSpec
+    return parsed as Record<string, unknown>
   } catch {
     return null
   }
 }
 
-const GARMENTS = new Set(['tshirt', 'hoodie', 'tank'])
-const HEX = /^#?[0-9a-fA-F]{6}$/
+function pickEnum<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  return typeof value === 'string' && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : fallback
+}
 
-function normalizeHex(value: unknown, fallback: string): string {
-  if (typeof value !== 'string' || !HEX.test(value.trim())) return fallback
-  const v = value.trim()
-  return v.startsWith('#') ? v : `#${v}`
+function toFeatures(value: unknown): string[] {
+  if (!Array.isArray(value)) return ['Overview', 'Details', 'Activity', 'Settings']
+  const cleaned = value
+    .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    .map((v) => v.trim().slice(0, 22))
+    .slice(0, 4)
+  while (cleaned.length < 4) {
+    cleaned.push(['Overview', 'Details', 'Activity', 'Settings'][cleaned.length])
+  }
+  return cleaned
 }
 
 // Call Gemini's REST API directly. Returns the raw model text.
@@ -120,30 +147,34 @@ export async function POST(req: Request) {
     const parsed = extractJson(text)
     if (!parsed) {
       return Response.json(
-        { success: false, error: 'Model did not return a valid design spec.' },
+        { success: false, error: 'Model did not return a valid app spec.' },
         { status: 502 },
       )
     }
 
+    const appName =
+      typeof parsed.appName === 'string' && parsed.appName.trim()
+        ? parsed.appName.trim().slice(0, 22)
+        : 'Untitled App'
+
     const spec: DesignSpec = {
-      appName:
-        typeof parsed.appName === 'string' && parsed.appName.trim()
-          ? parsed.appName.trim().slice(0, 22)
-          : 'Vibewear',
-      garment:
-        typeof parsed.garment === 'string' && GARMENTS.has(parsed.garment)
-          ? parsed.garment
-          : 'tshirt',
-      garmentColor: normalizeHex(parsed.garmentColor, '#111111'),
-      textColor: normalizeHex(parsed.textColor, '#ffffff'),
-      slogan:
-        typeof parsed.slogan === 'string' && parsed.slogan.trim()
-          ? parsed.slogan.trim().toUpperCase().slice(0, 24)
-          : 'VIBECODE',
+      appName,
+      appType: pickEnum(parsed.appType, APP_TYPES, 'mobile'),
+      colorScheme: pickEnum(parsed.colorScheme, COLOR_SCHEMES, 'monochrome'),
+      tagline:
+        typeof parsed.tagline === 'string' && parsed.tagline.trim()
+          ? parsed.tagline.trim().slice(0, 48)
+          : appName,
       description:
         typeof parsed.description === 'string' && parsed.description.trim()
           ? parsed.description.trim()
-          : 'A clean, original apparel concept generated on Layer 3.',
+          : 'A clean, original product concept generated by Vibecode Inc.',
+      features: toFeatures(parsed.features),
+      primaryAction:
+        typeof parsed.primaryAction === 'string' && parsed.primaryAction.trim()
+          ? parsed.primaryAction.trim().slice(0, 18)
+          : 'Get started',
+      hasContent: true,
     }
 
     return Response.json({
