@@ -53,7 +53,7 @@ export default function WorkspacePage() {
             Layer 3 — Prompt Menu
           </span>
           <span className="rounded-full border border-border bg-card/60 px-2.5 py-1 font-mono">
-            gemini-3.6-flash
+            gemini-2.5-flash
           </span>
         </div>
       </header>

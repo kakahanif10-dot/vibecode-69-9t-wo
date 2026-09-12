@@ -1,10 +1,11 @@
 // VIBECODE INC. (c) 2026 — Layer 3 design engine
-import { generateText } from 'ai'
 
 export const maxDuration = 60
 
-// Gemini 3.6 Flash via Vercel AI Gateway (zero-config auth in v0 previews + Vercel).
-const MODEL = 'google/gemini-3.6-flash'
+// Google Gemini free-tier, called directly (bypasses Vercel AI Gateway — no card needed).
+// The API key is read server-side only from GOOGLE_GENERATIVE_AI_API_KEY and never sent to the browser.
+const MODEL = 'gemini-2.5-flash'
+const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`
 
 const SYSTEM_INSTRUCTION = `You are the Layer 3 design engine for Vibecode Inc.
 The user describes an apparel / app-brand idea in any language.
@@ -54,6 +55,45 @@ function normalizeHex(value: unknown, fallback: string): string {
   return v.startsWith('#') ? v : `#${v}`
 }
 
+// Call Gemini's REST API directly. Returns the raw model text.
+async function callGemini(userPrompt: string): Promise<string> {
+  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
+  if (!apiKey) {
+    throw new Error(
+      'GOOGLE_GENERATIVE_AI_API_KEY is not set on the server. Add it in Project Settings → Environment Variables.',
+    )
+  }
+
+  const res = await fetch(GEMINI_ENDPOINT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      // Send the key as a header, not a query param, so it never lands in request/URL logs.
+      'x-goog-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      generationConfig: { responseMimeType: 'application/json' },
+    }),
+  })
+
+  if (!res.ok) {
+    // Surface Google's status but keep the key out of any error text.
+    const detail = await res.text().catch(() => '')
+    throw new Error(
+      `Gemini API error (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`,
+    )
+  }
+
+  const data = await res.json()
+  const text: string =
+    data?.candidates?.[0]?.content?.parts
+      ?.map((p: { text?: string }) => p?.text ?? '')
+      .join('') ?? ''
+  return text
+}
+
 export async function POST(req: Request) {
   let userPrompt = ''
   try {
@@ -75,11 +115,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const { text } = await generateText({
-      model: MODEL,
-      system: SYSTEM_INSTRUCTION,
-      prompt: userPrompt,
-    })
+    const text = await callGemini(userPrompt)
 
     const parsed = extractJson(text)
     if (!parsed) {
