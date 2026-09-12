@@ -5,7 +5,10 @@ export const maxDuration = 60
 // Google Gemini free-tier, called directly (bypasses Vercel AI Gateway — no card needed).
 // The API key is read server-side only from GOOGLE_GENERATIVE_AI_API_KEY and never sent to the browser.
 const MODEL = 'gemini-flash-latest'
-const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`
+// Ordered list of free-tier models to try when the primary is overloaded (503) or rate-limited (429).
+const MODEL_FALLBACKS = ['gemini-flash-latest', 'gemini-flash-lite-latest'] as const
+const endpointFor = (model: string) =>
+  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
 
 const APP_TYPES = ['mobile', 'saas', 'landing', 'ecommerce'] as const
 const COLOR_SCHEMES = [
@@ -82,7 +85,64 @@ function toFeatures(value: unknown): string[] {
   return cleaned
 }
 
-// Call Gemini's REST API directly. Returns the raw model text.
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+// Transient upstream statuses worth retrying: overloaded, rate-limited, gateway hiccups.
+const RETRYABLE = new Set([429, 500, 502, 503, 504])
+
+class OverloadedError extends Error {}
+
+// Try one model, retrying transient errors with exponential backoff.
+async function requestModel(
+  model: string,
+  apiKey: string,
+  userPrompt: string,
+  attempts = 3,
+): Promise<string> {
+  let lastStatus = 0
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const res = await fetch(endpointFor(model), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Send the key as a header, not a query param, so it never lands in request/URL logs.
+        'x-goog-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+        generationConfig: { responseMimeType: 'application/json' },
+      }),
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      return (
+        data?.candidates?.[0]?.content?.parts
+          ?.map((p: { text?: string }) => p?.text ?? '')
+          .join('') ?? ''
+      )
+    }
+
+    lastStatus = res.status
+    const detail = await res.text().catch(() => '')
+
+    if (RETRYABLE.has(res.status)) {
+      // Back off (250ms, 500ms, 1s...) before retrying the same model.
+      if (attempt < attempts - 1) await sleep(250 * 2 ** attempt)
+      continue
+    }
+
+    // Non-transient (e.g. 400/401/404) — fail fast, keep key out of the text.
+    throw new Error(
+      `Gemini API error (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`,
+    )
+  }
+  // Exhausted retries for this model with a transient status.
+  throw new OverloadedError(`Model "${model}" unavailable (${lastStatus})`)
+}
+
+// Call Gemini's REST API directly, falling back across free-tier models when overloaded.
 async function callGemini(userPrompt: string): Promise<string> {
   const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
   if (!apiKey) {
@@ -91,34 +151,22 @@ async function callGemini(userPrompt: string): Promise<string> {
     )
   }
 
-  const res = await fetch(GEMINI_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      // Send the key as a header, not a query param, so it never lands in request/URL logs.
-      'x-goog-api-key': apiKey,
-    },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-      generationConfig: { responseMimeType: 'application/json' },
-    }),
-  })
-
-  if (!res.ok) {
-    // Surface Google's status but keep the key out of any error text.
-    const detail = await res.text().catch(() => '')
-    throw new Error(
-      `Gemini API error (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`,
-    )
+  let overloaded: OverloadedError | null = null
+  for (const model of MODEL_FALLBACKS) {
+    try {
+      return await requestModel(model, apiKey, userPrompt)
+    } catch (err) {
+      // Only advance to the next model on transient/overload failures.
+      if (err instanceof OverloadedError) {
+        overloaded = err
+        continue
+      }
+      throw err
+    }
   }
-
-  const data = await res.json()
-  const text: string =
-    data?.candidates?.[0]?.content?.parts
-      ?.map((p: { text?: string }) => p?.text ?? '')
-      .join('') ?? ''
-  return text
+  throw new OverloadedError(
+    overloaded?.message ?? 'All Gemini models are currently overloaded.',
+  )
 }
 
 export async function POST(req: Request) {
@@ -184,6 +232,16 @@ export async function POST(req: Request) {
       spec,
     })
   } catch (error) {
+    if (error instanceof OverloadedError) {
+      return Response.json(
+        {
+          success: false,
+          error:
+            'Gemini is experiencing high demand right now. This is temporary — please tap Generate again in a moment.',
+        },
+        { status: 503 },
+      )
+    }
     return Response.json(
       { success: false, error: (error as Error).message },
       { status: 500 },
