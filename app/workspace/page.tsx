@@ -1,99 +1,28 @@
 'use client'
 
 import { useState } from 'react'
-import {
-  WorkspaceSidebar,
-  type Project,
-} from '@/components/workspace/workspace-sidebar'
-import { WorkspaceTopnav } from '@/components/workspace/workspace-topnav'
-import { ChatPanel, type ChatMessage } from '@/components/workspace/chat-panel'
-import { PreviewPanel } from '@/components/workspace/preview-panel'
-import { ApkLoadingOverlay } from '@/components/workspace/apk-loading-overlay'
 import { AnimatePresence } from 'framer-motion'
-
-const PROJECTS: Project[] = [
-  { id: 'p1', name: 'Cloudpour Coffee', updated: 'Edited just now' },
-  { id: 'p2', name: 'Northlight Dashboard', updated: 'Edited 2h ago' },
-  { id: 'p3', name: 'Recipe Box', updated: 'Yesterday' },
-  { id: 'p4', name: 'Portfolio v3', updated: '3 days ago' },
-]
-
-const INITIAL_MESSAGES: ChatMessage[] = [
-  {
-    id: 'm1',
-    role: 'user',
-    content: 'Build a landing page for my coffee shop with a menu and hours.',
-  },
-  {
-    id: 'm2',
-    role: 'assistant',
-    content:
-      'Done. I generated a landing page with a hero, a six-item menu grid, and an hours section. Preview it on the right, or ask for changes.',
-    steps: [
-      'Created app/page.tsx',
-      'Added Hero and MenuGrid components',
-      'Wired up the hours schedule',
-    ],
-  },
-]
-
-let idCounter = 100
+import { PhoneSimulator } from '@/components/workspace/phone-simulator'
+import { PromptMenu } from '@/components/workspace/prompt-menu'
+import { ApkLoadingOverlay } from '@/components/workspace/apk-loading-overlay'
+import { VibecodeLogo } from '@/components/vibecode-logo'
+import { DEFAULT_SPEC, type DesignSpec } from '@/lib/design'
 
 export default function WorkspacePage() {
-  const [collapsed, setCollapsed] = useState(false)
-  const [activeId, setActiveId] = useState('p1')
-  const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES)
-  const [input, setInput] = useState('')
+  const [prompt, setPrompt] = useState('')
+  const [spec, setSpec] = useState<DesignSpec>(DEFAULT_SPEC)
   const [generating, setGenerating] = useState(false)
-  const [generatingApk, setGeneratingApk] = useState(false)
-  const [built, setBuilt] = useState(true)
-  const [deployState, setDeployState] = useState<
-    'idle' | 'deploying' | 'deployed'
-  >('idle')
+  const [error, setError] = useState<string | null>(null)
 
-  const handleSend = () => {
-    if (!input.trim() || generating) return
-    const userMsg: ChatMessage = {
-      id: `u${idCounter++}`,
-      role: 'user',
-      content: input.trim(),
-    }
-    setMessages((m) => [...m, userMsg])
-    setInput('')
+  // Live, frontend-only edits to the design spec.
+  const patchSpec = (patch: Partial<DesignSpec>) =>
+    setSpec((s) => ({ ...s, ...patch }))
+
+  const handleGenerate = async () => {
+    const userPrompt = prompt.trim()
+    if (!userPrompt || generating) return
     setGenerating(true)
-    setBuilt(false)
-
-    // Simulate generation streaming + preview build.
-    setTimeout(() => {
-      setBuilt(true)
-    }, 1600)
-    setTimeout(() => {
-      setGenerating(false)
-      setMessages((m) => [
-        ...m,
-        {
-          id: `a${idCounter++}`,
-          role: 'assistant',
-          content:
-            'Applied your changes and rebuilt the preview. Let me know what to refine next.',
-          steps: ['Updated components', 'Rebuilt live preview'],
-        },
-      ])
-    }, 2400)
-  }
-
-  const handleGenerateApk = async () => {
-    const userPrompt = input.trim()
-    if (!userPrompt || generatingApk || generating) return
-
-    const userMsg: ChatMessage = {
-      id: `u${idCounter++}`,
-      role: 'user',
-      content: userPrompt,
-    }
-    setMessages((m) => [...m, userMsg])
-    setInput('')
-    setGeneratingApk(true)
+    setError(null)
 
     try {
       const res = await fetch('/api/generate', {
@@ -102,91 +31,52 @@ export default function WorkspacePage() {
         body: JSON.stringify({ userPrompt }),
       })
       const data = await res.json()
-
       if (!res.ok || !data.success) {
         throw new Error(data?.error || data?.message || 'Generation failed')
       }
-
-      setMessages((m) => [
-        ...m,
-        {
-          id: `a${idCounter++}`,
-          role: 'assistant',
-          content:
-            'Native APK berhasil dirakit. Berikut kode React Native (Expo) untuk App.js:',
-          code: data.generatedCode,
-          steps: [
-            'Menganalisis prompt',
-            'Merakit kode React Native (Expo)',
-            'APK siap diunduh',
-          ],
-        },
-      ])
+      setSpec(data.spec as DesignSpec)
     } catch (err) {
-      setMessages((m) => [
-        ...m,
-        {
-          id: `a${idCounter++}`,
-          role: 'assistant',
-          content: `Gagal merakit APK: ${(err as Error).message}. Silakan coba lagi.`,
-        },
-      ])
+      setError((err as Error).message)
     } finally {
-      setGeneratingApk(false)
+      setGenerating(false)
     }
   }
 
-  const handleNew = () => {
-    setMessages([])
-    setBuilt(false)
-    setDeployState('idle')
-  }
-
-  const handleDeploy = () => {
-    if (deployState === 'deploying') return
-    setDeployState('deploying')
-    setTimeout(() => setDeployState('deployed'), 2000)
-  }
-
-  const activeProject =
-    PROJECTS.find((p) => p.id === activeId)?.name ?? 'Untitled Project'
-
   return (
-    <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      <WorkspaceSidebar
-        collapsed={collapsed}
-        onToggle={() => setCollapsed((c) => !c)}
-        projects={PROJECTS}
-        activeId={activeId}
-        onSelect={setActiveId}
-        onNew={handleNew}
-      />
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      {/* Top bar */}
+      <header className="flex h-14 shrink-0 items-center justify-between border-b border-border px-5">
+        <VibecodeLogo markClassName="h-7 w-7" />
+        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span className="hidden items-center gap-1.5 sm:flex">
+            <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
+            Layer 3 — Prompt Menu
+          </span>
+          <span className="rounded-full border border-border bg-card/60 px-2.5 py-1 font-mono">
+            gemini-3.6-flash
+          </span>
+        </div>
+      </header>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <WorkspaceTopnav
-          projectName={activeProject}
-          deployState={deployState}
-          onDeploy={handleDeploy}
-        />
+      {/* Two-panel layout */}
+      <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(360px,460px)_1fr]">
+        <div className="relative min-h-0 border-b border-border lg:border-b-0 lg:border-r">
+          <PromptMenu
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            spec={spec}
+            onPatch={patchSpec}
+            onGenerate={handleGenerate}
+            generating={generating}
+            error={error}
+          />
+          <AnimatePresence>
+            {generating && <ApkLoadingOverlay />}
+          </AnimatePresence>
+        </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,420px)_1fr]">
-          <div className="relative min-h-0 border-r border-border">
-            <ChatPanel
-              messages={messages}
-              input={input}
-              onInputChange={setInput}
-              onSend={handleSend}
-              onGenerateApk={handleGenerateApk}
-              generating={generating}
-              generatingApk={generatingApk}
-            />
-            <AnimatePresence>
-              {generatingApk && <ApkLoadingOverlay />}
-            </AnimatePresence>
-          </div>
-          <div className="hidden min-h-0 lg:block">
-            <PreviewPanel building={generating && !built} built={built} />
-          </div>
+        <div className="hidden min-h-0 bg-[oklch(0.12_0_0)] lg:block">
+          <PhoneSimulator spec={spec} building={generating} />
         </div>
       </div>
     </div>

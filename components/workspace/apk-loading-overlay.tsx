@@ -6,10 +6,10 @@ import { VibecodeMark } from '@/components/vibecode-logo'
 
 const STEPS = [
   'Menganalisis prompt',
-  'Merancang arsitektur komponen',
-  'Merakit kode React Native',
-  'Mengoptimalkan build Expo',
-  'Menyelesaikan native APK',
+  'Memilih palet & tipografi',
+  'Menyusun spesifikasi desain',
+  'Merender pratinjau garmen',
+  'Menyelesaikan desain',
 ]
 
 export function ApkLoadingOverlay() {
