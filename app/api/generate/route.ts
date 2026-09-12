@@ -4,7 +4,7 @@ export const maxDuration = 60
 
 // Google Gemini free-tier, called directly (bypasses Vercel AI Gateway — no card needed).
 // The API key is read server-side only from GOOGLE_GENERATIVE_AI_API_KEY and never sent to the browser.
-const MODEL = 'gemini-2.5-flash'
+const MODEL = 'gemini-flash-latest'
 const GEMINI_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`
 
 const SYSTEM_INSTRUCTION = `You are the Layer 3 design engine for Vibecode Inc.
