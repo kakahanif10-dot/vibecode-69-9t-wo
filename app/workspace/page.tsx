@@ -50,10 +50,10 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-3 text-xs text-muted-foreground">
           <span className="hidden items-center gap-1.5 sm:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-foreground" />
-            Layer 3 — Prompt Menu
+            Universal App Generator
           </span>
           <span className="rounded-full border border-border bg-card/60 px-2.5 py-1 font-mono">
-            gemini-3.6-flash
+            gemini-flash-latest
           </span>
         </div>
       </header>
