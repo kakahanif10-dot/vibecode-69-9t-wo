@@ -1,3 +1,4 @@
+// VIBECODE INC ACTIVE 2026
 'use client'
 
 import { useState } from 'react'

@@ -1,10 +1,16 @@
 // VIBECODE INC. (c) 2026 — Layer 3 design engine
 import { generateText } from 'ai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
 
 export const maxDuration = 60
 
-// Gemini 3.6 Flash via Vercel AI Gateway (zero-config auth in v0 previews + Vercel).
-const MODEL = 'google/gemini-3.6-flash'
+// Direct Google AI Studio (free tier) — bypasses Vercel AI Gateway, no credit card.
+// The key is read server-side only and never shipped to the browser.
+const google = createGoogleGenerativeAI({
+  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
+})
+const MODEL_ID = 'gemini-3.6-flash'
+const MODEL = google(MODEL_ID)
 
 const SYSTEM_INSTRUCTION = `You are the Layer 3 design engine for Vibecode Inc.
 The user describes an apparel / app-brand idea in any language.
