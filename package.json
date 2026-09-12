@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@babel/standalone": "^8.0.5",
     "@base-ui/react": "^1.5.0",
     "@vercel/analytics": "1.6.1",
     "ai": "^7.0.99",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
+    "@types/babel__standalone": "^7.1.9",
     "@types/node": "^24",
     "@types/react": "^19",
     "@types/react-dom": "^19",
