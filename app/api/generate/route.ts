@@ -9,7 +9,7 @@ export const maxDuration = 60
 const google = createGoogleGenerativeAI({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
 })
-const MODEL_ID = 'gemini-2.0-flash'
+const MODEL_ID = 'gemini-3.6-flash'
 const MODEL = google(MODEL_ID)
 
 const SYSTEM_INSTRUCTION = `You are the Layer 3 design engine for Vibecode Inc.
