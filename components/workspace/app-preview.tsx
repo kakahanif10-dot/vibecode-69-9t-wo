@@ -174,7 +174,7 @@ function EditableText({
 
 // Commit helpers for the top-level, single-value spec fields.
 const setField =
-  (key: 'appName' | 'tagline' | 'description' | 'primaryAction') =>
+  (key: 'appName' | 'tagline' | 'description' | 'primaryAction' | 'industry') =>
   (editor: SpecEditor, next: string) =>
     editor((s) => ({ ...s, [key]: next }))
 
@@ -468,7 +468,11 @@ function AppHeader({
             />
           </p>
           <p className="truncate text-[9px] leading-tight" style={{ color: p.muted }}>
-            {spec.industry}
+            <EditableText
+              value={spec.industry}
+              commit={setField('industry')}
+              ariaLabel="Edit industry"
+            />
           </p>
         </div>
       </div>
@@ -552,6 +556,172 @@ function CtaButton({
   )
 }
 
+/**
+ * The main call-to-action, bound to `spec.primaryAction`. It behaves like a
+ * normal button (single click runs `onClick`) but, when the preview is
+ * editable, a double-click turns the label into an inline field — so an
+ * interactive control never loses its action just to become editable.
+ */
+function EditablePrimaryButton({
+  spec,
+  onClick,
+  className,
+  style,
+}: {
+  spec: DesignSpec
+  onClick?: () => void
+  className?: string
+  style?: React.CSSProperties
+}) {
+  const editor = useContext(EditContext)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(spec.primaryAction)
+
+  useEffect(() => {
+    if (!editing) setDraft(spec.primaryAction)
+  }, [spec.primaryAction, editing])
+
+  const save = () => {
+    setEditing(false)
+    const next = draft.trim()
+    if (editor && next && next !== spec.primaryAction) {
+      editor((s) => ({ ...s, primaryAction: next }))
+    } else {
+      setDraft(spec.primaryAction)
+    }
+  }
+
+  if (editing && editor) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            save()
+          } else if (e.key === 'Escape') {
+            setDraft(spec.primaryAction)
+            setEditing(false)
+          }
+        }}
+        aria-label="Edit primary action"
+        className={cn('text-center outline-none ring-1 ring-white/60', className)}
+        style={style}
+      />
+    )
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      onDoubleClick={
+        editor
+          ? () => {
+              setDraft(spec.primaryAction)
+              setEditing(true)
+            }
+          : undefined
+      }
+      title={editor ? 'Double-click to rename' : undefined}
+      className={className}
+      style={style}
+    >
+      {spec.primaryAction}
+    </button>
+  )
+}
+
+/**
+ * A category filter chip. Single click filters the catalog (its original job);
+ * when the preview is editable, a double-click renames that category inline.
+ * The "All" chip is never editable because it is not part of the spec.
+ */
+function CategoryChip({
+  label,
+  active,
+  editable,
+  palette,
+  onSelect,
+  onRename,
+}: {
+  label: string
+  active: boolean
+  editable: boolean
+  palette: Palette
+  onSelect: () => void
+  onRename: (next: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(label)
+
+  useEffect(() => {
+    if (!editing) setDraft(label)
+  }, [label, editing])
+
+  const save = () => {
+    setEditing(false)
+    const next = draft.trim()
+    if (next && next !== label) onRename(next)
+    else setDraft(label)
+  }
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            save()
+          } else if (e.key === 'Escape') {
+            setDraft(label)
+            setEditing(false)
+          }
+        }}
+        aria-label="Edit category"
+        className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium outline-none ring-1 ring-white/60"
+        style={{
+          width: `${Math.max(draft.length + 2, 4)}ch`,
+          backgroundColor: palette.surface,
+          color: palette.text,
+          border: `1px solid ${palette.border}`,
+        }}
+      />
+    )
+  }
+
+  return (
+    <button
+      onClick={onSelect}
+      onDoubleClick={
+        editable
+          ? () => {
+              setDraft(label)
+              setEditing(true)
+            }
+          : undefined
+      }
+      title={editable ? 'Double-click to rename' : undefined}
+      className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors"
+      style={{
+        backgroundColor: active ? palette.accent : palette.surface,
+        color: active ? palette.accentText : palette.muted,
+        border: `1px solid ${palette.border}`,
+      }}
+    >
+      {label}
+    </button>
+  )
+}
+
 /* ------------------------------------------------------------------ */
 /* Catalog (menu / shop / explore) with working category filter + cart */
 /* ------------------------------------------------------------------ */
@@ -568,9 +738,22 @@ function CatalogPage({
   searchable?: boolean
 }) {
   const p = spec.palette
+  const editor = useContext(EditContext)
   const cats = useMemo(() => ['All', ...spec.categories], [spec.categories])
   const [cat, setCat] = useState('All')
   const [query, setQuery] = useState('')
+
+  // Rename a real category (index into spec.categories). Keeps the active
+  // filter selection pointing at the renamed chip so the grid stays in sync.
+  const renameCategory = (index: number, next: string) => {
+    if (!editor || index < 0) return
+    const old = spec.categories[index]
+    editor((s) => ({
+      ...s,
+      categories: s.categories.map((c, i) => (i === index ? next : c)),
+    }))
+    setCat((cur) => (cur === old ? next : cur))
+  }
 
   const catOf = (i: number) =>
     spec.categories.length ? spec.categories[i % spec.categories.length] : 'All'
@@ -621,23 +804,17 @@ function CatalogPage({
 
       {/* Category filter chips */}
       <div className="thin-scroll -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
-        {cats.map((c) => {
-          const on = c === cat
-          return (
-            <button
-              key={c}
-              onClick={() => setCat(c)}
-              className="shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors"
-              style={{
-                backgroundColor: on ? p.accent : p.surface,
-                color: on ? p.accentText : p.muted,
-                border: `1px solid ${p.border}`,
-              }}
-            >
-              {c}
-            </button>
-          )
-        })}
+        {cats.map((c, i) => (
+          <CategoryChip
+            key={c + i}
+            label={c}
+            active={c === cat}
+            editable={!!editor && i > 0}
+            palette={p}
+            onSelect={() => setCat(c)}
+            onRename={(next) => renameCategory(i - 1, next)}
+          />
+        ))}
       </div>
 
       {/* Grid */}
@@ -855,7 +1032,11 @@ function CartPage({
       </div>
 
       <div className="mt-3">
-        <CtaButton spec={spec} label={spec.primaryAction} />
+        <EditablePrimaryButton
+          spec={spec}
+          className="w-full rounded-xl py-2.5 text-xs font-semibold transition-opacity active:opacity-80"
+          style={{ backgroundColor: p.accent, color: p.accentText }}
+        />
       </div>
     </div>
   )
@@ -883,9 +1064,20 @@ function LoginScreen({ spec, onLogin }: { spec: DesignSpec; onLogin: () => void 
           iconClassName="h-7 w-7"
           rounded="rounded-2xl"
         />
-        <p className="text-center text-[15px] font-bold leading-tight">{spec.appName}</p>
+        <p className="text-center text-[15px] font-bold leading-tight">
+          <EditableText
+            value={spec.appName}
+            commit={setField('appName')}
+            ariaLabel="Edit app name"
+          />
+        </p>
         <p className="text-center text-[10px]" style={{ color: p.muted }}>
-          {spec.industry} · Secure portal
+          <EditableText
+            value={spec.industry}
+            commit={setField('industry')}
+            ariaLabel="Edit industry"
+          />{' '}
+          · Secure portal
         </p>
       </div>
 
@@ -1026,13 +1218,12 @@ function TaxHomePage({ spec, goCart }: { spec: DesignSpec; goCart: () => void })
                     {formatPrice(spec.currency, result.amount)}
                   </span>
                 </div>
-                <button
+                <EditablePrimaryButton
+                  spec={spec}
                   onClick={goCart}
                   className="mt-1 w-full rounded-lg py-1.5 text-[10px] font-bold"
                   style={{ backgroundColor: p.accent, color: p.accentText }}
-                >
-                  {spec.primaryAction}
-                </button>
+                />
               </div>
             </motion.div>
           )}
@@ -1426,7 +1617,11 @@ function ProfilePage({
         <div>
           <p className="text-[13px] font-bold">Demo User</p>
           <p className="text-[10px]" style={{ color: p.muted }}>
-            {spec.industry}
+            <EditableText
+              value={spec.industry}
+              commit={setField('industry')}
+              ariaLabel="Edit industry"
+            />
           </p>
         </div>
       </div>
