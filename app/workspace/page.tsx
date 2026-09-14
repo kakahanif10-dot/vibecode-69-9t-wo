@@ -180,6 +180,7 @@ export default function WorkspacePage() {
         onSelect={selectSession}
         onNew={newProject}
         onDelete={deleteSession}
+        spec={spec}
       />
 
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -192,7 +193,7 @@ export default function WorkspacePage() {
               Universal Context-Aware Engine
             </span>
             <span className="rounded-full border border-border bg-card/60 px-2.5 py-1 font-mono">
-              gemini-3.5-flash · AI Gateway
+              gemini-3.5-flash · Google AI
             </span>
           </div>
         </header>
