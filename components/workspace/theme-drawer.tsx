@@ -256,7 +256,7 @@ export function ThemeDrawer({
     <motion.aside
       animate={{ width: open ? 360 : 52 }}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
-      className="relative z-10 hidden shrink-0 flex-col border-l border-white/10 bg-[oklch(0.14_0_0)] lg:flex"
+      className="relative z-10 hidden max-h-screen w-full max-w-[360px] shrink-0 flex-col overflow-hidden border-l border-white/10 bg-[oklch(0.14_0_0)] lg:flex"
     >
       {/* Header / collapse */}
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-white/10 px-3">
@@ -298,7 +298,7 @@ export function ThemeDrawer({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="thin-scroll flex-1 space-y-5 overflow-y-auto p-4"
+            className="thin-scroll min-h-0 w-full flex-1 space-y-5 overflow-y-auto overflow-x-hidden p-4"
           >
             {/* ---------------------------------------------------------- */}
             {/* Universal App Input (legacy spec) — 100% white-label.       */}
