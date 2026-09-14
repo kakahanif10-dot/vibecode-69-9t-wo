@@ -2,7 +2,9 @@
 // Detects the industry from any prompt (any language) and emits an
 // industry-aware app spec: functional multi-page template + matching palette
 // + industry-specific catalog. Rendered 100% client-side (0 MB server storage).
+// The reasoning core runs on the AI SDK over the Vercel AI Gateway (zero-config).
 
+import { generateText } from 'ai'
 import {
   TEMPLATE_PALETTES,
   TEMPLATES,
@@ -14,13 +16,12 @@ import {
 
 export const maxDuration = 60
 
-// Google Gemini free-tier, called directly (bypasses Vercel AI Gateway — no card needed).
-// The API key is read server-side only from GOOGLE_GENERATIVE_AI_API_KEY and never sent to the browser.
-const MODEL = 'gemini-flash-latest'
-// Ordered list of free-tier models to try when the primary is overloaded (503) or rate-limited (429).
-const MODEL_FALLBACKS = ['gemini-flash-latest', 'gemini-flash-lite-latest'] as const
-const endpointFor = (model: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`
+// Reasoning core runs on the AI SDK over the Vercel AI Gateway (zero-config in
+// v0 previews and Vercel deployments — no provider key or card required, auth is
+// supplied automatically). Models are referenced with plain `provider/model` IDs.
+const MODEL = 'google/gemini-3.5-flash'
+// Ordered fallbacks tried when the primary model is overloaded or rate-limited.
+const MODEL_FALLBACKS = ['google/gemini-3.5-flash', 'google/gemini-2.5-flash'] as const
 
 const SYSTEM_INSTRUCTION = `You are the Universal Context-Aware UI/UX Engine for Vibecode Inc., reasoning like a senior product designer with 10 years of experience.
 The user describes ANY software product in ANY language (SAMSAT / government tax portal, a coffee shop, a restaurant, an online store, a clinic, a SaaS tool, etc.).
@@ -198,87 +199,30 @@ function toCatalog(value: unknown, template: Template): CatalogItem[] {
   return cleaned.length ? cleaned : fallback[template]
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-// Transient upstream statuses worth retrying: overloaded, rate-limited, gateway hiccups.
-const RETRYABLE = new Set([429, 500, 502, 503, 504])
-
 class OverloadedError extends Error {}
 
-// Try one model, retrying transient errors with exponential backoff.
-async function requestModel(
-  model: string,
-  apiKey: string,
-  userPrompt: string,
-  attempts = 3,
-): Promise<string> {
-  let lastStatus = 0
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    const res = await fetch(endpointFor(model), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        // Send the key as a header, not a query param, so it never lands in request/URL logs.
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
-        contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-        generationConfig: { responseMimeType: 'application/json' },
-      }),
-    })
-
-    if (res.ok) {
-      const data = await res.json()
-      return (
-        data?.candidates?.[0]?.content?.parts
-          ?.map((p: { text?: string }) => p?.text ?? '')
-          .join('') ?? ''
-      )
-    }
-
-    lastStatus = res.status
-    const detail = await res.text().catch(() => '')
-
-    if (RETRYABLE.has(res.status)) {
-      // Back off (250ms, 500ms, 1s...) before retrying the same model.
-      if (attempt < attempts - 1) await sleep(250 * 2 ** attempt)
-      continue
-    }
-
-    // Non-transient (e.g. 400/401/404) — fail fast, keep key out of the text.
-    throw new Error(
-      `Gemini API error (${res.status})${detail ? `: ${detail.slice(0, 300)}` : ''}`,
-    )
-  }
-  // Exhausted retries for this model with a transient status.
-  throw new OverloadedError(`Model "${model}" unavailable (${lastStatus})`)
-}
-
-// Call Gemini's REST API directly, falling back across free-tier models when overloaded.
-async function callGemini(userPrompt: string): Promise<string> {
-  const apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  if (!apiKey) {
-    throw new Error(
-      'GOOGLE_GENERATIVE_AI_API_KEY is not set on the server. Add it in Project Settings → Environment Variables.',
-    )
-  }
-
-  let overloaded: OverloadedError | null = null
+// Run the reasoning core through the AI SDK + Vercel AI Gateway, falling back
+// across models when the primary is overloaded/rate-limited. The system prompt
+// asks for a single JSON object; the raw text is validated downstream.
+async function callEngine(userPrompt: string): Promise<string> {
+  let lastError: unknown = null
   for (const model of MODEL_FALLBACKS) {
     try {
-      return await requestModel(model, apiKey, userPrompt)
+      const { text } = await generateText({
+        model,
+        system: SYSTEM_INSTRUCTION,
+        prompt: userPrompt,
+        temperature: 0.7,
+      })
+      if (text?.trim()) return text
+      lastError = new Error(`Model "${model}" returned an empty response`)
     } catch (err) {
-      // Only advance to the next model on transient/overload failures.
-      if (err instanceof OverloadedError) {
-        overloaded = err
-        continue
-      }
-      throw err
+      // Advance to the next fallback model on any provider-side failure.
+      lastError = err
     }
   }
   throw new OverloadedError(
-    overloaded?.message ?? 'All Gemini models are currently overloaded.',
+    (lastError as Error)?.message ?? 'All engine models are currently overloaded.',
   )
 }
 
@@ -303,7 +247,7 @@ export async function POST(req: Request) {
   }
 
   try {
-    const text = await callGemini(userPrompt)
+    const text = await callEngine(userPrompt)
 
     const parsed = extractJson(text)
     if (!parsed) {
@@ -346,7 +290,7 @@ export async function POST(req: Request) {
         {
           success: false,
           error:
-            'Gemini is experiencing high demand right now. This is temporary — please tap Generate again in a moment.',
+            'The reasoning engine is experiencing high demand right now. This is temporary — please tap Generate again in a moment.',
         },
         { status: 503 },
       )
