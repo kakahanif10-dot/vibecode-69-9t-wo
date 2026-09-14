@@ -243,6 +243,11 @@ const GAME_KEYWORDS: Record<GameKind, string[]> = {
   snake: ['snake', 'ular', 'cacing', 'worm'],
   tetris: ['tetris', 'blocks', 'balok', 'block puzzle'],
   dino: ['dino', 'dinosaur', 'dinosaurus', 'runner', 'lari', 'jump game', 't-rex', 'trex'],
+  pong: ['pong', 'ping pong', 'ping-pong', 'tenis', 'tennis'],
+  breakout: ['breakout', 'brick breaker', 'bata', 'tembok', 'wall breaker'],
+  flappy: ['flappy', 'flappy bird', 'burung', 'bird game', 'pipe', 'pipa'],
+  '2048': ['2048', 'merge number', 'angka', 'number merge', 'slide puzzle'],
+  memory: ['memory', 'memory card', 'kartu memori', 'match card', 'matching', 'pasang', 'concentration'],
 }
 
 const GAME_META: Record<GameKind, { appName: string; industry: string; tagline: string; description: string }> = {
@@ -263,6 +268,36 @@ const GAME_META: Record<GameKind, { appName: string; industry: string; tagline: 
     industry: 'Arcade / Endless Runner',
     tagline: 'Jump the cacti, chase the distance',
     description: 'An endless side-scrolling runner — tap or press space to leap obstacles as the pace keeps climbing.',
+  },
+  pong: {
+    appName: 'Neon Pong',
+    industry: 'Arcade / Pong',
+    tagline: 'Bounce, rally, win',
+    description: 'The classic two-paddle arcade — move your paddle up and down to bounce the ball past the AI opponent.',
+  },
+  breakout: {
+    appName: 'Brick Breaker',
+    industry: 'Arcade / Breakout',
+    tagline: 'Smash every brick',
+    description: 'A brick-breaking classic — slide the paddle to bounce the ball and demolish every brick on the wall.',
+  },
+  flappy: {
+    appName: 'Flappy Dot',
+    industry: 'Arcade / Flappy',
+    tagline: 'Tap to flap, dodge the pipes',
+    description: 'A one-tap flyer — tap or press space to flap through the gaps between pipes without crashing.',
+  },
+  '2048': {
+    appName: 'Merge 2048',
+    industry: 'Puzzle / 2048',
+    tagline: 'Slide, merge, reach 2048',
+    description: 'A sliding number puzzle — swipe to merge matching tiles and climb toward the 2048 tile.',
+  },
+  memory: {
+    appName: 'Memory Match',
+    industry: 'Puzzle / Memory',
+    tagline: 'Flip, match, remember',
+    description: 'A card-matching memory game — flip cards two at a time and find every matching pair.',
   },
 }
 

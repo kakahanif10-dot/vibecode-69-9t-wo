@@ -14,7 +14,12 @@ import { cn } from '@/lib/utils'
 const GAMES: { key: GameKind; label: string }[] = [
   { key: 'snake', label: 'Snake' },
   { key: 'tetris', label: 'Tetris' },
-  { key: 'dino', label: 'Dino Run' },
+  { key: 'dino', label: 'Dino' },
+  { key: 'pong', label: 'Pong' },
+  { key: 'breakout', label: 'Breakout' },
+  { key: 'flappy', label: 'Flappy' },
+  { key: '2048', label: '2048' },
+  { key: 'memory', label: 'Memory' },
 ]
 
 export function GameArcade({ spec }: { spec: DesignSpec }) {
@@ -77,6 +82,11 @@ export function GameArcade({ spec }: { spec: DesignSpec }) {
         {active === 'snake' && <SnakeGame spec={spec} />}
         {active === 'tetris' && <TetrisGame spec={spec} />}
         {active === 'dino' && <DinoGame spec={spec} />}
+        {active === 'pong' && <PongGame spec={spec} />}
+        {active === 'breakout' && <BreakoutGame spec={spec} />}
+        {active === 'flappy' && <FlappyGame spec={spec} />}
+        {active === '2048' && <Game2048 spec={spec} />}
+        {active === 'memory' && <MemoryGame spec={spec} />}
       </div>
     </div>
   )
@@ -775,6 +785,792 @@ function DinoGame({ spec }: { spec: DesignSpec }) {
       <ControlButton spec={spec} ariaLabel="Jump" onClick={() => (over ? reset() : jump())} className="h-11 w-full">
         <ChevronUp className="mr-1 h-4 w-4" /> <span className="text-xs font-bold uppercase tracking-wide">Jump</span>
       </ControlButton>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* PONG                                                                 */
+/* ------------------------------------------------------------------ */
+
+const PONG_W = 300
+const PONG_H = 180
+const PADDLE_H = 36
+const PADDLE_W = 7
+const BALL_R = 5
+
+function PongGame({ spec }: { spec: DesignSpec }) {
+  const p = spec.palette
+  const [running, setRunning] = useState(false)
+  const [over, setOver] = useState(false)
+  const [scoreP, setScoreP] = useState(0)
+  const [scoreAI, setScoreAI] = useState(0)
+  const [tick, setTick] = useState(0)
+
+  const ballX = useRef(PONG_W / 2)
+  const ballY = useRef(PONG_H / 2)
+  const ballVX = useRef(3)
+  const ballVY = useRef(2)
+  const playerY = useRef(PONG_H / 2 - PADDLE_H / 2)
+  const aiY = useRef(PONG_H / 2 - PADDLE_H / 2)
+  const raf = useRef<number | null>(null)
+  const last = useRef(0)
+  const runningRef = useRef(false)
+  runningRef.current = running
+
+  const WIN_SCORE = 5
+
+  const reset = useCallback(() => {
+    ballX.current = PONG_W / 2
+    ballY.current = PONG_H / 2
+    ballVX.current = Math.random() > 0.5 ? 3 : -3
+    ballVY.current = (Math.random() - 0.5) * 4
+    playerY.current = PONG_H / 2 - PADDLE_H / 2
+    aiY.current = PONG_H / 2 - PADDLE_H / 2
+    setScoreP(0)
+    setScoreAI(0)
+    setOver(false)
+    setRunning(true)
+  }, [])
+
+  const movePaddle = useCallback((dy: number) => {
+    playerY.current = Math.max(0, Math.min(PONG_H - PADDLE_H, playerY.current + dy * 7))
+  }, [])
+
+  useGameKeys((k) => {
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') movePaddle(-1)
+    else if (k === 'ArrowDown' || k === 's' || k === 'S') movePaddle(1)
+    else if (k === ' ') {
+      if (over) reset()
+      else setRunning((r) => !r)
+    }
+  })
+
+  useEffect(() => {
+    if (!running || over) return
+    const loop = (t: number) => {
+      if (!last.current) last.current = t
+      const dt = Math.min(2.5, (t - last.current) / 16.67)
+      last.current = t
+
+      ballX.current += ballVX.current * dt
+      ballY.current += ballVY.current * dt
+
+      if (ballY.current < BALL_R) { ballY.current = BALL_R; ballVY.current *= -1 }
+      if (ballY.current > PONG_H - BALL_R) { ballY.current = PONG_H - BALL_R; ballVY.current *= -1 }
+
+      // Player paddle (left)
+      const px = 8
+      if (ballX.current - BALL_R < px + PADDLE_W && ballX.current > px &&
+          ballY.current > playerY.current - BALL_R && ballY.current < playerY.current + PADDLE_H + BALL_R && ballVX.current < 0) {
+        ballVX.current = Math.abs(ballVX.current) * 1.05
+        ballVY.current += (ballY.current - (playerY.current + PADDLE_H / 2)) * 0.15
+      }
+
+      // AI paddle (right)
+      const ax = PONG_W - 8 - PADDLE_W
+      if (ballX.current + BALL_R > ax && ballX.current < ax + PADDLE_W &&
+          ballY.current > aiY.current - BALL_R && ballY.current < aiY.current + PADDLE_H + BALL_R && ballVX.current > 0) {
+        ballVX.current = -Math.abs(ballVX.current) * 1.05
+        ballVY.current += (ballY.current - (aiY.current + PADDLE_H / 2)) * 0.15
+      }
+
+      // AI follows ball
+      const target = ballY.current - PADDLE_H / 2
+      const diff = target - aiY.current
+      aiY.current = Math.max(0, Math.min(PONG_H - PADDLE_H, aiY.current + Math.sign(diff) * Math.min(Math.abs(diff), 2.8 * dt)))
+
+      // Score
+      if (ballX.current < 0) {
+        setScoreAI((s) => {
+          const ns = s + 1
+          if (ns >= WIN_SCORE) { setOver(true); setRunning(false) }
+          return ns
+        })
+        ballX.current = PONG_W / 2
+        ballY.current = PONG_H / 2
+        ballVX.current = 3
+        ballVY.current = (Math.random() - 0.5) * 4
+      } else if (ballX.current > PONG_W) {
+        setScoreP((s) => {
+          const ns = s + 1
+          if (ns >= WIN_SCORE) { setOver(true); setRunning(false) }
+          return ns
+        })
+        ballX.current = PONG_W / 2
+        ballY.current = PONG_H / 2
+        ballVX.current = -3
+        ballVY.current = (Math.random() - 0.5) * 4
+      }
+
+      setTick((n) => (n + 1) % 1000000)
+      raf.current = requestAnimationFrame(loop)
+    }
+    raf.current = requestAnimationFrame(loop)
+    return () => {
+      if (raf.current) cancelAnimationFrame(raf.current)
+      last.current = 0
+    }
+  }, [running, over])
+
+  void tick
+
+  return (
+    <div className="flex w-full max-w-[320px] flex-col gap-2.5">
+      <ScoreBar spec={spec} items={[{ label: 'You', value: scoreP }, { label: 'AI', value: scoreAI }]} />
+
+      <div
+        className="relative w-full cursor-pointer select-none overflow-hidden rounded-xl"
+        style={{ aspectRatio: `${PONG_W} / ${PONG_H}`, backgroundColor: p.surface, border: `1px solid ${p.border}` }}
+      >
+        <svg viewBox={`0 0 ${PONG_W} ${PONG_H}`} className="h-full w-full" preserveAspectRatio="none">
+          <line x1={PONG_W / 2} y1="0" x2={PONG_W / 2} y2={PONG_H} stroke={p.border} strokeWidth="2" strokeDasharray="6 6" />
+          <rect x={8} y={playerY.current} width={PADDLE_W} height={PADDLE_H} rx="3" fill={p.accent} />
+          <rect x={PONG_W - 8 - PADDLE_W} y={aiY.current} width={PADDLE_W} height={PADDLE_H} rx="3" fill="#f43f5e" />
+          <circle cx={ballX.current} cy={ballY.current} r={BALL_R} fill={p.text} />
+        </svg>
+
+        {!running && !over && (
+          <Overlay spec={spec} title="Pong" hint="↑ ↓ or W/S to move your paddle (left). First to 5 wins." onAction={reset} actionLabel="Play" />
+        )}
+        {over && (
+          <Overlay spec={spec} title={scoreP > scoreAI ? 'You Win!' : 'AI Wins'} hint={`${scoreP} – ${scoreAI}. Play again?`} onAction={reset} actionLabel="Retry" />
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <ControlButton spec={spec} ariaLabel="Up" onClick={() => movePaddle(-1)} className="h-10 flex-1"><ChevronUp className="h-4 w-4" /></ControlButton>
+        <ControlButton spec={spec} ariaLabel="Down" onClick={() => movePaddle(1)} className="h-10 flex-1"><ChevronDown className="h-4 w-4" /></ControlButton>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* BREAKOUT                                                             */
+/* ------------------------------------------------------------------ */
+
+const BR_W = 300
+const BR_H = 200
+const BR_PADDLE_W = 50
+const BR_PADDLE_H = 7
+const BR_BALL_R = 5
+const BR_COLS = 7
+const BR_ROWS = 4
+
+function BreakoutGame({ spec }: { spec: DesignSpec }) {
+  const p = spec.palette
+  const [running, setRunning] = useState(false)
+  const [over, setOver] = useState(false)
+  const [won, setWon] = useState(false)
+  const [score, setScore] = useState(0)
+  const [tick, setTick] = useState(0)
+
+  const ballX = useRef(BR_W / 2)
+  const ballY = useRef(BR_H - 30)
+  const ballVX = useRef(2.5)
+  const ballVY = useRef(-2.5)
+  const paddleX = useRef(BR_W / 2 - BR_PADDLE_W / 2)
+  const bricks = useRef<{ x: number; y: number; alive: boolean; hue: number }[]>([])
+  const raf = useRef<number | null>(null)
+  const last = useRef(0)
+  const runningRef = useRef(false)
+  runningRef.current = running
+
+  const BRICK_W = (BR_W - 20) / BR_COLS
+  const BRICK_H = 12
+  const BRICK_TOP = 16
+
+  const initBricks = () => {
+    const arr: { x: number; y: number; alive: boolean; hue: number }[] = []
+    for (let r = 0; r < BR_ROWS; r++) {
+      for (let c = 0; c < BR_COLS; c++) {
+        arr.push({ x: 10 + c * BRICK_W, y: BRICK_TOP + r * (BRICK_H + 3), alive: true, hue: (r * 60 + c * 30) % 360 })
+      }
+    }
+    return arr
+  }
+
+  const reset = useCallback(() => {
+    bricks.current = initBricks()
+    ballX.current = BR_W / 2
+    ballY.current = BR_H - 30
+    ballVX.current = 2.5 * (Math.random() > 0.5 ? 1 : -1)
+    ballVY.current = -2.5
+    paddleX.current = BR_W / 2 - BR_PADDLE_W / 2
+    setScore(0)
+    setOver(false)
+    setWon(false)
+    setRunning(true)
+  }, [])
+
+  useGameKeys((k) => {
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') paddleX.current = Math.max(0, paddleX.current - 16)
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') paddleX.current = Math.min(BR_W - BR_PADDLE_W, paddleX.current + 16)
+    else if (k === ' ') {
+      if (over) reset()
+      else setRunning((r) => !r)
+    }
+  })
+
+  useEffect(() => {
+    if (!running || over) return
+    const loop = (t: number) => {
+      if (!last.current) last.current = t
+      const dt = Math.min(2.5, (t - last.current) / 16.67)
+      last.current = t
+
+      ballX.current += ballVX.current * dt
+      ballY.current += ballVY.current * dt
+
+      if (ballX.current < BR_BALL_R) { ballX.current = BR_BALL_R; ballVX.current *= -1 }
+      if (ballX.current > BR_W - BR_BALL_R) { ballX.current = BR_W - BR_BALL_R; ballVX.current *= -1 }
+      if (ballY.current < BR_BALL_R) { ballY.current = BR_BALL_R; ballVY.current *= -1 }
+
+      // Paddle collision
+      if (ballY.current + BR_BALL_R > BR_H - BR_PADDLE_H - 2 &&
+          ballX.current > paddleX.current && ballX.current < paddleX.current + BR_PADDLE_W && ballVY.current > 0) {
+        ballVY.current = -Math.abs(ballVY.current)
+        ballVX.current += (ballX.current - (paddleX.current + BR_PADDLE_W / 2)) * 0.1
+      }
+
+      // Brick collision
+      for (const b of bricks.current) {
+        if (!b.alive) continue
+        if (ballX.current > b.x && ballX.current < b.x + BRICK_W &&
+            ballY.current > b.y && ballY.current < b.y + BRICK_H) {
+          b.alive = false
+          ballVY.current *= -1
+          setScore((s) => s + 10)
+          break
+        }
+      }
+
+      // Ball falls below
+      if (ballY.current > BR_H) {
+        setOver(true)
+        setRunning(false)
+      }
+
+      // All bricks cleared
+      if (bricks.current.every((b) => !b.alive)) {
+        setWon(true)
+        setOver(true)
+        setRunning(false)
+      }
+
+      setTick((n) => (n + 1) % 1000000)
+      raf.current = requestAnimationFrame(loop)
+    }
+    raf.current = requestAnimationFrame(loop)
+    return () => {
+      if (raf.current) cancelAnimationFrame(raf.current)
+      last.current = 0
+    }
+  }, [running, over])
+
+  void tick
+
+  return (
+    <div className="flex w-full max-w-[320px] flex-col gap-2.5">
+      <ScoreBar spec={spec} items={[{ label: 'Score', value: score }, { label: 'Bricks', value: bricks.current.filter((b) => b.alive).length }]} />
+
+      <div
+        className="relative w-full cursor-pointer select-none overflow-hidden rounded-xl"
+        style={{ aspectRatio: `${BR_W} / ${BR_H}`, backgroundColor: p.surface, border: `1px solid ${p.border}` }}
+        onPointerMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect()
+          const ratio = (e.clientX - rect.left) / rect.width
+          paddleX.current = Math.max(0, Math.min(BR_W - BR_PADDLE_W, ratio * BR_W - BR_PADDLE_W / 2))
+        }}
+      >
+        <svg viewBox={`0 0 ${BR_W} ${BR_H}`} className="h-full w-full" preserveAspectRatio="none">
+          {bricks.current.map((b, i) =>
+            b.alive ? (
+              <rect key={i} x={b.x} y={b.y} width={BRICK_W - 2} height={BRICK_H} rx="2" fill={`hsl(${b.hue} 60% 55%)`} />
+            ) : null,
+          )}
+          <rect x={paddleX.current} y={BR_H - BR_PADDLE_H - 2} width={BR_PADDLE_W} height={BR_PADDLE_H} rx="3" fill={p.accent} />
+          <circle cx={ballX.current} cy={ballY.current} r={BR_BALL_R} fill={p.text} />
+        </svg>
+
+        {!running && !over && (
+          <Overlay spec={spec} title="Breakout" hint="← → or move mouse to slide the paddle. Break all the bricks." onAction={reset} actionLabel="Play" />
+        )}
+        {over && (
+          <Overlay spec={spec} title={won ? 'Cleared!' : 'Game Over'} hint={won ? `Perfect — ${score} points!` : `You scored ${score}. Try again?`} onAction={reset} actionLabel="Retry" />
+        )}
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* FLAPPY                                                               */
+/* ------------------------------------------------------------------ */
+
+const FL_W = 300
+const FL_H = 200
+const FL_PIPE_W = 36
+const FL_GAP = 60
+const FL_BIRD_X = 60
+const FL_BIRD_R = 9
+
+function FlappyGame({ spec }: { spec: DesignSpec }) {
+  const p = spec.palette
+  const [running, setRunning] = useState(false)
+  const [over, setOver] = useState(false)
+  const [score, setScore] = useState(0)
+  const [best, setBest] = useState(0)
+  const [tick, setTick] = useState(0)
+
+  const birdY = useRef(FL_H / 2)
+  const vel = useRef(0)
+  const pipes = useRef<{ x: number; gapY: number; passed: boolean }[]>([])
+  const speed = useRef(2)
+  const raf = useRef<number | null>(null)
+  const last = useRef(0)
+  const runningRef = useRef(false)
+  const overRef = useRef(false)
+  runningRef.current = running
+  overRef.current = over
+
+  const GRAVITY = 0.35
+  const FLAP_V = 6
+
+  const flap = useCallback(() => {
+    if (overRef.current) return
+    if (!runningRef.current) { setRunning(true); return }
+    vel.current = FLAP_V
+  }, [])
+
+  const reset = useCallback(() => {
+    birdY.current = FL_H / 2
+    vel.current = 0
+    pipes.current = [{ x: FL_W + 20, gapY: 40 + Math.random() * (FL_H - FL_GAP - 80), passed: false }]
+    speed.current = 2
+    setScore(0)
+    setOver(false)
+    setRunning(true)
+  }, [])
+
+  useGameKeys((k) => {
+    if (k === ' ' || k === 'ArrowUp' || k === 'w' || k === 'W') {
+      if (overRef.current) reset()
+      else flap()
+    }
+  })
+
+  useEffect(() => {
+    if (!running || over) return
+    const loop = (t: number) => {
+      if (!last.current) last.current = t
+      const dt = Math.min(2.5, (t - last.current) / 16.67)
+      last.current = t
+
+      vel.current -= GRAVITY * dt
+      birdY.current += vel.current * dt
+
+      // Move pipes
+      pipes.current = pipes.current
+        .map((pp) => ({ ...pp, x: pp.x - speed.current * dt }))
+      // Spawn
+      const lastPipe = pipes.current[pipes.current.length - 1]
+      if (!lastPipe || lastPipe.x < FL_W - 140) {
+        pipes.current.push({ x: FL_W, gapY: 40 + Math.random() * (FL_H - FL_GAP - 80), passed: false })
+      }
+      // Score + cleanup
+      pipes.current = pipes.current.filter((pp) => {
+        if (!pp.passed && pp.x + FL_PIPE_W < FL_BIRD_X) {
+          pp.passed = true
+          setScore((s) => s + 1)
+        }
+        return pp.x + FL_PIPE_W > -5
+      })
+
+      speed.current += 0.002 * dt
+
+      // Collision
+      if (birdY.current < FL_BIRD_R || birdY.current > FL_H - FL_BIRD_R) {
+        setOver(true)
+        setRunning(false)
+        setBest((b) => Math.max(b, score))
+        return
+      }
+      for (const pp of pipes.current) {
+        if (FL_BIRD_X + FL_BIRD_R > pp.x && FL_BIRD_X - FL_BIRD_R < pp.x + FL_PIPE_W) {
+          if (birdY.current - FL_BIRD_R < pp.gapY || birdY.current + FL_BIRD_R > pp.gapY + FL_GAP) {
+            setOver(true)
+            setRunning(false)
+            setBest((b) => Math.max(b, score))
+            return
+          }
+        }
+      }
+
+      setTick((n) => (n + 1) % 1000000)
+      raf.current = requestAnimationFrame(loop)
+    }
+    raf.current = requestAnimationFrame(loop)
+    return () => {
+      if (raf.current) cancelAnimationFrame(raf.current)
+      last.current = 0
+    }
+  }, [running, over, score])
+
+  void tick
+
+  return (
+    <div className="flex w-full max-w-[320px] flex-col gap-2.5">
+      <ScoreBar spec={spec} items={[{ label: 'Score', value: score }, { label: 'Best', value: best }]} />
+
+      <div
+        className="relative w-full cursor-pointer select-none overflow-hidden rounded-xl"
+        style={{ aspectRatio: `${FL_W} / ${FL_H}`, backgroundColor: p.surface, border: `1px solid ${p.border}` }}
+        onPointerDown={(e) => { e.preventDefault(); if (over) reset(); else flap() }}
+      >
+        <svg viewBox={`0 0 ${FL_W} ${FL_H}`} className="h-full w-full" preserveAspectRatio="none">
+          {pipes.current.map((pp, i) => (
+            <g key={i}>
+              <rect x={pp.x} y={0} width={FL_PIPE_W} height={pp.gapY} rx="3" fill={p.accent} />
+              <rect x={pp.x} y={pp.gapY + FL_GAP} width={FL_PIPE_W} height={FL_H - pp.gapY - FL_GAP} rx="3" fill={p.accent} />
+            </g>
+          ))}
+          <circle cx={FL_BIRD_X} cy={birdY.current} r={FL_BIRD_R} fill="#facc15" stroke="#1a1a2e" strokeWidth="1.5" />
+          <circle cx={FL_BIRD_X + 3} cy={birdY.current - 2} r="2" fill="#1a1a2e" />
+        </svg>
+
+        {!running && !over && (
+          <Overlay spec={spec} title="Flappy Dot" hint="Space / ↑ / tap to flap. Dodge the pipes." onAction={reset} actionLabel="Play" />
+        )}
+        {over && (
+          <Overlay spec={spec} title="Crashed" hint={`Score ${score} · Best ${best}. Tap to retry.`} onAction={reset} actionLabel="Retry" />
+        )}
+      </div>
+
+      <ControlButton spec={spec} ariaLabel="Flap" onClick={() => (over ? reset() : flap())} className="h-11 w-full">
+        <ChevronUp className="mr-1 h-4 w-4" /> <span className="text-xs font-bold uppercase tracking-wide">Flap</span>
+      </ControlButton>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* 2048                                                                 */
+/* ------------------------------------------------------------------ */
+
+const G2048_SIZE = 4
+
+type Tile = { value: number; id: number; row: number; col: number; merged?: boolean }
+
+function Game2048({ spec }: { spec: DesignSpec }) {
+  const p = spec.palette
+  const [tiles, setTiles] = useState<Tile[]>([])
+  const [score, setScore] = useState(0)
+  const [best, setBest] = useState(0)
+  const [over, setOver] = useState(false)
+  const [won, setWon] = useState(false)
+  const idRef = useRef(0)
+
+  const newId = () => ++idRef.current
+
+  const addRandom = useCallback((board: Tile[]): Tile[] => {
+    const occupied = new Set(board.map((t) => `${t.row},${t.col}`))
+    const empty: { row: number; col: number }[] = []
+    for (let r = 0; r < G2048_SIZE; r++) {
+      for (let c = 0; c < G2048_SIZE; c++) {
+        if (!occupied.has(`${r},${c}`)) empty.push({ row: r, col: c })
+      }
+    }
+    if (empty.length === 0) return board
+    const spot = empty[Math.floor(Math.random() * empty.length)]
+    return [...board, { value: Math.random() < 0.9 ? 2 : 4, id: newId(), row: spot.row, col: spot.col }]
+  }, [])
+
+  const reset = useCallback(() => {
+    idRef.current = 0
+    let b: Tile[] = []
+    b = addRandom(b)
+    b = addRandom(b)
+    setTiles(b)
+    setScore(0)
+    setOver(false)
+    setWon(false)
+  }, [addRandom])
+
+  useEffect(() => { reset() }, [reset])
+
+  const getGrid = (board: Tile[]): (Tile | null)[][] => {
+    const g: (Tile | null)[][] = Array.from({ length: G2048_SIZE }, () => Array(G2048_SIZE).fill(null))
+    for (const t of board) g[t.row][t.col] = t
+    return g
+  }
+
+  const slide = useCallback((dir: 'up' | 'down' | 'left' | 'right') => {
+    if (over) return
+    setTiles((board) => {
+      const grid = getGrid(board)
+      let moved = false
+      let gained = 0
+      let hit2048 = false
+
+      const newGrid: (Tile | null)[][] = Array.from({ length: G2048_SIZE }, () => Array(G2048_SIZE).fill(null))
+
+      const lines: Tile[][] = []
+      for (let i = 0; i < G2048_SIZE; i++) {
+        const line: Tile[] = []
+        for (let j = 0; j < G2048_SIZE; j++) {
+          let r: number, c: number
+          if (dir === 'left') { r = i; c = j }
+          else if (dir === 'right') { r = i; c = G2048_SIZE - 1 - j }
+          else if (dir === 'up') { r = j; c = i }
+          else { r = G2048_SIZE - 1 - j; c = i }
+          if (grid[r][c]) line.push(grid[r][c]!)
+        }
+        lines.push(line)
+      }
+
+      for (let i = 0; i < G2048_SIZE; i++) {
+        const line = lines[i]
+        const merged: (Tile | null)[] = []
+        let k = 0
+        while (k < line.length) {
+          if (k + 1 < line.length && line[k].value === line[k + 1].value) {
+            const nv = line[k].value * 2
+            if (nv === 2048) hit2048 = true
+            gained += nv
+            merged.push({ value: nv, id: newId(), row: 0, col: 0, merged: true })
+            k += 2
+          } else {
+            merged.push({ ...line[k], merged: false })
+            k++
+          }
+        }
+        for (let j = 0; j < merged.length; j++) {
+          let r: number, c: number
+          if (dir === 'left') { r = i; c = j }
+          else if (dir === 'right') { r = i; c = G2048_SIZE - 1 - j }
+          else if (dir === 'up') { r = j; c = i }
+          else { r = G2048_SIZE - 1 - j; c = i }
+          const oldTile = grid[dir === 'left' || dir === 'right' ? i : dir === 'up' ? j : G2048_SIZE - 1 - j]?.[dir === 'left' ? j : dir === 'right' ? G2048_SIZE - 1 - j : i]
+          if (oldTile !== merged[j] && (oldTile?.row !== r || oldTile?.col !== c)) moved = true
+          newGrid[r][c] = { ...merged[j]!, row: r, col: c }
+        }
+      }
+
+      // Check if anything moved
+      const oldPositions = new Set(board.map((t) => `${t.row},${t.col},${t.value}`))
+      const newTiles: Tile[] = []
+      for (let r = 0; r < G2048_SIZE; r++) {
+        for (let c = 0; c < G2048_SIZE; c++) {
+          if (newGrid[r][c]) newTiles.push(newGrid[r][c]!)
+        }
+      }
+      const newPositions = new Set(newTiles.map((t) => `${t.row},${t.col},${t.value}`))
+      if (oldPositions.size === newPositions.size) {
+        let same = true
+        for (const k of oldPositions) { if (!newPositions.has(k)) { same = false; break } }
+        if (same && !hit2048) return board
+      }
+
+      moved = true
+      if (gained > 0) {
+        setScore((s) => { const ns = s + gained; setBest((b) => Math.max(b, ns)); return ns })
+      }
+      if (hit2048) setWon(true)
+
+      let result = addRandom(newTiles)
+
+      // Check game over
+      const checkGrid = getGrid(result)
+      let canMove = false
+      for (let r = 0; r < G2048_SIZE && !canMove; r++) {
+        for (let c = 0; c < G2048_SIZE && !canMove; c++) {
+          if (!checkGrid[r][c]) canMove = true
+          else {
+            if (c + 1 < G2048_SIZE && checkGrid[r][c + 1] && checkGrid[r][c]!.value === checkGrid[r][c + 1]!.value) canMove = true
+            if (r + 1 < G2048_SIZE && checkGrid[r + 1][c] && checkGrid[r][c]!.value === checkGrid[r + 1][c]!.value) canMove = true
+          }
+        }
+      }
+      if (!canMove) setOver(true)
+
+      return result
+    })
+  }, [addRandom, over])
+
+  useGameKeys((k) => {
+    if (k === 'ArrowUp' || k === 'w' || k === 'W') slide('up')
+    else if (k === 'ArrowDown' || k === 's' || k === 'S') slide('down')
+    else if (k === 'ArrowLeft' || k === 'a' || k === 'A') slide('left')
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') slide('right')
+  })
+
+  const TILE_COLORS: Record<number, string> = {
+    2: '#eee4da', 4: '#ede0c8', 8: '#f2b179', 16: '#f59563',
+    32: '#f67c5f', 64: '#f65e3b', 128: '#edcf72', 256: '#edcc61',
+    512: '#edc850', 1024: '#edc53f', 2048: '#edc22e',
+  }
+
+  return (
+    <div className="flex w-full max-w-[280px] flex-col gap-2.5">
+      <ScoreBar spec={spec} items={[{ label: 'Score', value: score }, { label: 'Best', value: best }]} />
+
+      <div className="relative">
+        <div
+          className="grid gap-1.5 rounded-xl p-2"
+          style={{
+            gridTemplateColumns: `repeat(${G2048_SIZE}, 1fr)`,
+            backgroundColor: p.surface,
+            border: `1px solid ${p.border}`,
+            aspectRatio: '1',
+          }}
+        >
+          {Array.from({ length: G2048_SIZE * G2048_SIZE }).map((_, i) => {
+            const r = Math.floor(i / G2048_SIZE)
+            const c = i % G2048_SIZE
+            const tile = tiles.find((t) => t.row === r && t.col === c)
+            const bg = tile ? TILE_COLORS[tile.value] || '#edc22e' : 'rgba(255,255,255,0.05)'
+            const tc = tile && tile.value <= 4 ? '#776e65' : '#fff'
+            return (
+              <div
+                key={i}
+                className="flex items-center justify-center rounded-lg text-[11px] font-black"
+                style={{ backgroundColor: bg, color: tc, fontSize: tile && tile.value >= 1024 ? '13px' : '15px' }}
+              >
+                {tile ? tile.value : ''}
+              </div>
+            )
+          })}
+        </div>
+
+        {over && (
+          <Overlay spec={spec} title="Game Over" hint={`Score ${score}. Swipe or arrows to play again.`} onAction={reset} actionLabel="Retry" />
+        )}
+        {won && !over && (
+          <Overlay spec={spec} title="2048!" hint={`You reached 2048! Keep going or reset.`} onAction={() => setWon(false)} actionLabel="Continue" />
+        )}
+      </div>
+
+      <div className="flex items-center gap-1.5">
+        <ControlButton spec={spec} ariaLabel="Left" onClick={() => slide('left')} className="h-10 flex-1"><ChevronLeft className="h-4 w-4" /></ControlButton>
+        <ControlButton spec={spec} ariaLabel="Up" onClick={() => slide('up')} className="h-10 flex-1"><ChevronUp className="h-4 w-4" /></ControlButton>
+        <ControlButton spec={spec} ariaLabel="Down" onClick={() => slide('down')} className="h-10 flex-1"><ChevronDown className="h-4 w-4" /></ControlButton>
+        <ControlButton spec={spec} ariaLabel="Right" onClick={() => slide('right')} className="h-10 flex-1"><ChevronRight className="h-4 w-4" /></ControlButton>
+      </div>
+      <button
+        onClick={reset}
+        className="rounded-lg py-1.5 text-[10px] font-bold uppercase tracking-wide"
+        style={{ backgroundColor: p.surface, color: p.muted, border: `1px solid ${p.border}` }}
+      >
+        New Game
+      </button>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* MEMORY                                                               */
+/* ------------------------------------------------------------------ */
+
+const MEM_EMOJIS = ['🎮', '🚀', '⭐', '🎯', '🔥', '💡', '🎨', '⚡']
+
+function MemoryGame({ spec }: { spec: DesignSpec }) {
+  const p = spec.palette
+  const [cards, setCards] = useState<{ id: number; emoji: string; flipped: boolean; matched: boolean }[]>([])
+  const [flipped, setFlipped] = useState<number[]>([])
+  const [moves, setMoves] = useState(0)
+  const [over, setOver] = useState(false)
+  const [busy, setBusy] = useState(false)
+
+  const reset = useCallback(() => {
+    const deck = [...MEM_EMOJIS, ...MEM_EMOJIS]
+      .sort(() => Math.random() - 0.5)
+      .map((emoji, i) => ({ id: i, emoji, flipped: false, matched: false }))
+    setCards(deck)
+    setFlipped([])
+    setMoves(0)
+    setOver(false)
+    setBusy(false)
+  }, [])
+
+  useEffect(() => { reset() }, [reset])
+
+  const flip = (id: number) => {
+    if (busy || over) return
+    const card = cards.find((c) => c.id === id)
+    if (!card || card.flipped || card.matched) return
+
+    const newFlipped = [...flipped, id]
+    setCards((cs) => cs.map((c) => (c.id === id ? { ...c, flipped: true } : c)))
+    setFlipped(newFlipped)
+
+    if (newFlipped.length === 2) {
+      setBusy(true)
+      setMoves((m) => m + 1)
+      const [a, b] = newFlipped
+      const ca = cards.find((c) => c.id === a)
+      const cb = cards.find((c) => c.id === b)
+      if (ca && cb && ca.emoji === cb.emoji) {
+        setTimeout(() => {
+          setCards((cs) => cs.map((c) => (c.id === a || c.id === b ? { ...c, matched: true } : c)))
+          setFlipped([])
+          setBusy(false)
+          setCards((cs) => {
+            if (cs.every((c) => c.matched)) setOver(true)
+            return cs
+          })
+        }, 400)
+      } else {
+        setTimeout(() => {
+          setCards((cs) => cs.map((c) => (c.id === a || c.id === b ? { ...c, flipped: false } : c)))
+          setFlipped([])
+          setBusy(false)
+        }, 800)
+      }
+    }
+  }
+
+  const matchedCount = cards.filter((c) => c.matched).length / 2
+
+  return (
+    <div className="flex w-full max-w-[300px] flex-col gap-2.5">
+      <ScoreBar spec={spec} items={[{ label: 'Moves', value: moves }, { label: 'Pairs', value: `${matchedCount}/${MEM_EMOJIS.length}` }]} />
+
+      <div className="relative">
+        <div
+          className="grid grid-cols-4 gap-1.5 rounded-xl p-2"
+          style={{ backgroundColor: p.surface, border: `1px solid ${p.border}` }}
+        >
+          {cards.map((card) => (
+            <button
+              key={card.id}
+              onClick={() => flip(card.id)}
+              disabled={card.matched || card.flipped || busy}
+              className="flex aspect-square items-center justify-center rounded-lg text-xl transition-all"
+              style={{
+                backgroundColor: card.matched ? p.accent : card.flipped ? p.bg : p.surface,
+                border: `1px solid ${p.border}`,
+                opacity: card.matched ? 0.7 : 1,
+              }}
+            >
+              {card.flipped || card.matched ? card.emoji : ''}
+            </button>
+          ))}
+        </div>
+
+        {over && (
+          <Overlay spec={spec} title="Perfect!" hint={`All pairs found in ${moves} moves.`} onAction={reset} actionLabel="Play Again" />
+        )}
+      </div>
+
+      <button
+        onClick={reset}
+        className="rounded-lg py-1.5 text-[10px] font-bold uppercase tracking-wide"
+        style={{ backgroundColor: p.surface, color: p.muted, border: `1px solid ${p.border}` }}
+      >
+        New Game
+      </button>
     </div>
   )
 }

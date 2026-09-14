@@ -15,7 +15,7 @@ export type Template =
   | 'generic'
 
 // Which playable arcade game the preview should boot into when template==='game'.
-export type GameKind = 'snake' | 'tetris' | 'dino'
+export type GameKind = 'snake' | 'tetris' | 'dino' | 'pong' | 'breakout' | 'flappy' | '2048' | 'memory'
 
 export type Palette = {
   bg: string
