@@ -57,7 +57,7 @@ export function PhoneSimulator({
         <div className="relative flex h-full w-full flex-col overflow-hidden rounded-[2.25rem] bg-[oklch(0.16_0_0)]">
           {/* Status bar */}
           <div className="absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-6 pt-3 text-[11px] font-medium text-white/80 mix-blend-difference">
-            <span>{now}</span>
+            <span suppressHydrationWarning>{now}</span>
             <div className="flex items-center gap-1.5">
               <Signal className="h-3 w-3" />
               <Wifi className="h-3 w-3" />
