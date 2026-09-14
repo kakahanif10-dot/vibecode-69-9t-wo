@@ -1,8 +1,9 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ConsultantPanel } from '@/components/workspace/consultant-panel'
 import { ResponsivePreview } from '@/components/workspace/responsive-preview'
+import { ThemeDrawer } from '@/components/workspace/theme-drawer'
 import {
   WorkspaceSidebar,
   type SidebarTab,
@@ -74,6 +75,26 @@ export default function WorkspacePage() {
   const [tab, setTab] = useState<SidebarTab>('chats')
   const [sessions, setSessions] = useState<Session[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
+
+  // Pane 3 — theme modifier drawer + its 3.6s hydration loop.
+  const [drawerOpen, setDrawerOpen] = useState(true)
+  const [hydrating, setHydrating] = useState(false)
+  const hydrateTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (hydrateTimer.current) clearTimeout(hydrateTimer.current)
+    }
+  }, [])
+
+  // Commit a new accent token from the 2D color canvas and run a fluid
+  // theme-hydration loop across the active simulator frame (~3.6s).
+  const applyAccent = (hex: string) => {
+    setSpec((s) => ({ ...s, palette: { ...s.palette, accent: hex } }))
+    setHydrating(true)
+    if (hydrateTimer.current) clearTimeout(hydrateTimer.current)
+    hydrateTimer.current = setTimeout(() => setHydrating(false), COMPILE_DURATION_MS)
+  }
 
   // Hydrate sessions from the browser after mount (avoids SSR mismatch).
   useEffect(() => {
@@ -257,8 +278,8 @@ export default function WorkspacePage() {
           </div>
         </header>
 
-        {/* Consultant + preview */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(360px,460px)_1fr]">
+        {/* Three-pane console: consultant · preview · modifier drawer */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,420px)_1fr_auto]">
           <div className="min-h-0 border-b border-border lg:border-b-0 lg:border-r">
             <ConsultantPanel
               prompt={prompt}
@@ -274,8 +295,16 @@ export default function WorkspacePage() {
           </div>
 
           <div className="hidden min-h-0 lg:block">
-            <ResponsivePreview spec={spec} building={generating} />
+            <ResponsivePreview spec={spec} building={generating || hydrating} />
           </div>
+
+          <ThemeDrawer
+            spec={spec}
+            open={drawerOpen}
+            onToggle={() => setDrawerOpen((o) => !o)}
+            onApplyAccent={applyAccent}
+            disabled={!spec.hasContent || generating}
+          />
         </div>
       </div>
     </div>
