@@ -31,6 +31,8 @@ import {
   HeartPulse,
   Zap,
   Sparkles,
+  Wallet,
+  GraduationCap,
 } from 'lucide-react'
 import type { CatalogItem, DesignSpec, Palette, Template } from '@/lib/design'
 
@@ -42,6 +44,8 @@ import type { CatalogItem, DesignSpec, Palette, Template } from '@/lib/design'
 // so a generated app reads as a real institution/brand — never a bare initial.
 const BRAND_ICON: Record<Template, typeof Home> = {
   government: Landmark,
+  fintech: Wallet,
+  edutech: GraduationCap,
   food: Coffee,
   ecommerce: ShoppingBag,
   health: HeartPulse,
@@ -136,6 +140,18 @@ function pagesFor(template: DesignSpec['template']): PageDef[] {
         { key: 'home', label: 'Plans', icon: LayoutGrid },
         { key: 'explore', label: 'Modules', icon: Search },
         { key: 'profile', label: 'Account', icon: User },
+      ]
+    case 'fintech':
+      return [
+        { key: 'home', label: 'Wallet', icon: Wallet },
+        { key: 'explore', label: 'Explore', icon: Search },
+        { key: 'profile', label: 'Account', icon: User },
+      ]
+    case 'edutech':
+      return [
+        { key: 'home', label: 'Learn', icon: GraduationCap },
+        { key: 'explore', label: 'Browse', icon: Search },
+        { key: 'profile', label: 'Me', icon: User },
       ]
     default:
       return [
@@ -1155,6 +1171,16 @@ function ProfilePage({
       { label: 'Paid', value: '14' },
       { label: 'Due', value: '1' },
     ],
+    fintech: [
+      { label: 'Accounts', value: '3' },
+      { label: 'Cards', value: '2' },
+      { label: 'Score', value: '742' },
+    ],
+    edutech: [
+      { label: 'Courses', value: '6' },
+      { label: 'Certs', value: '3' },
+      { label: 'Streak', value: '12' },
+    ],
     health: [
       { label: 'Visits', value: '9' },
       { label: 'Booked', value: String(cartCount) },
@@ -1183,6 +1209,8 @@ function ProfilePage({
   }
   const ROW_SETS: Record<Template, string[]> = {
     government: ['Personal data', 'My vehicles', 'Payment history', 'Notifications'],
+    fintech: ['Personal data', 'Linked cards', 'Transaction history', 'Security & PIN'],
+    edutech: ['Personal data', 'My courses', 'Certificates', 'Notifications'],
     health: ['Personal data', 'Medical records', 'Appointments', 'Notifications'],
     saas: ['Workspace settings', 'Team & roles', 'Billing & plan', 'Notifications'],
     food: ['Order history', 'Addresses', 'Payment methods', 'Notifications'],

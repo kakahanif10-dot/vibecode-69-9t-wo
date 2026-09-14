@@ -31,7 +31,7 @@ Return ONLY a single minified JSON object (no markdown, no prose, no code fences
 {
   "appName": string,        // short official-sounding product/brand name, max 22 chars
   "industry": string,       // human label of the detected industry, max 28 chars (e.g. "Government / Vehicle Tax")
-  "template": "government" | "food" | "ecommerce" | "health" | "saas" | "generic",
+  "template": "government" | "fintech" | "edutech" | "food" | "ecommerce" | "health" | "saas" | "generic",
   "currency": string,       // currency symbol that fits the locale of the idea ("Rp", "$", "€"...), max 3 chars
   "tagline": string,        // punchy hero headline, max 48 chars
   "description": string,    // one friendly sentence describing the product
@@ -46,9 +46,11 @@ Return ONLY a single minified JSON object (no markdown, no prose, no code fences
 }
 
 TEMPLATE RULES (pick the best fit):
-- "government": public services, tax (SAMSAT), permits, ID/licensing. Use authoritative institutional colors — navy blue background, steel greys, an ORANGE warning accent for anything payment/tax related. Catalog rows = payable services (name = service, price = amount due, meta = due date or status). Categories = service groups.
+- "government": public services, tax (SAMSAT), permits, ID/licensing. Use authoritative institutional colors — DEEP NAVY (#0A192F) background, SLATE SILVER (#8892B0) secondary text, an ALERT AMBER (#FF6B00) accent for anything payment/tax related. Catalog rows = payable services (name = service, price = amount due, meta = due date or status). Categories = service groups.
+- "fintech": banks, digital wallets, payments, investing, crypto, insurance. Use TRUST + GROWTH colors — near-black vault background with a confident EMERALD/GREEN money accent (never a warning red for balances). Catalog rows = accounts, cards or transactions (name, price = balance or amount, meta = account type or date). Categories = money areas (Accounts, Cards, Invest, Pay).
+- "edutech": schools, universities, online courses, e-learning, tutoring. Use FOCUSED, FRIENDLY colors — deep academic blue background with a bright blue accent. Catalog rows = courses/lessons (name, price = course fee or 0, meta = instructor, duration or level). Categories = subjects or levels.
 - "food": coffee shops, cafes, restaurants, delivery. Use warm EARTH TONES — espresso browns, cream, forest green accent. Catalog rows = menu items (name, price, meta = short description). Categories = menu sections (Coffee, Pastries...).
-- "ecommerce": online stores, marketplaces, retail. Use bright high-conversion colors (vivid orange/red accent like Shopee/Amazon). Catalog rows = products (name, price, meta = brand or short label). Categories = product categories.
+- "ecommerce": online stores, marketplaces, retail. Use a BRIGHT LIGHT commercial theme — clean ivory (#F5F5F5) background, pearl-white (#FFFFFF) product cards, dark text, and a high-vis ORANGE (#EE4D2D) conversion accent (Shopee/Amazon-like). Catalog rows = products (name, price, meta = brand or short label). Categories = product categories.
 - "health": clinics, hospitals, pharmacies, telemedicine, wellness. Use CLEAN CLINICAL colors — deep teal background, soft surfaces, a trustworthy teal/green accent (never alarming red). Catalog rows = services/appointments/medicines (name, price = consult/med fee or 0, meta = doctor, duration or dosage). Categories = specialties (Dentist, Cardiology, Pharmacy...).
 - "saas": software tools, dashboards, productivity, B2B platforms. Use MODERN SLEEK colors — near-black background with a confident violet/indigo accent. Catalog rows = plans or feature modules (name, price = plan price or 0, meta = short benefit). Categories = feature areas or plan tiers.
 - "generic": anything else. Clean neutral palette with a confident accent. Catalog rows = key features/screens (price 0, meta = short benefit). Categories = sections.
@@ -113,6 +115,8 @@ function toPalette(value: unknown, template: Template): Palette {
 function toCategories(value: unknown, template: Template): string[] {
   const fallback: Record<Template, string[]> = {
     government: ['Tax', 'Permits', 'Licenses', 'Fines'],
+    fintech: ['Accounts', 'Cards', 'Invest', 'Pay'],
+    edutech: ['All Courses', 'Beginner', 'Popular', 'Certificates'],
     food: ['Coffee', 'Pastries', 'Tea', 'Specials'],
     ecommerce: ['Popular', 'New', 'Deals', 'Top rated'],
     health: ['General', 'Dentist', 'Cardiology', 'Pharmacy'],
@@ -134,6 +138,18 @@ function toCatalog(value: unknown, template: Template): CatalogItem[] {
       { name: 'License Renewal', price: 350000, meta: 'Active' },
       { name: 'Late Penalty', price: 75000, meta: 'Outstanding' },
       { name: 'Ownership Transfer', price: 500000, meta: 'Available' },
+    ],
+    fintech: [
+      { name: 'Main Balance', price: 12480500, meta: 'Savings · **** 4021' },
+      { name: 'Virtual Card', price: 2350000, meta: 'Spending · **** 8890' },
+      { name: 'Index Fund', price: 5600000, meta: '+4.2% this month' },
+      { name: 'Bill Payment', price: 320000, meta: 'Electricity · due 3d' },
+    ],
+    edutech: [
+      { name: 'Intro to Python', price: 0, meta: 'Beginner · 6h' },
+      { name: 'UI/UX Foundations', price: 49, meta: 'Sari W. · 8h' },
+      { name: 'Data Science Bootcamp', price: 129, meta: 'Certificate · 40h' },
+      { name: 'Public Speaking', price: 29, meta: 'Intermediate · 4h' },
     ],
     food: [
       { name: 'Espresso', price: 3.5, meta: 'Double shot' },
