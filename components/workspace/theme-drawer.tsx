@@ -1,9 +1,18 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PanelRightClose, PanelRightOpen, Pipette, RotateCcw, Check } from 'lucide-react'
-import { TEMPLATE_PALETTES, type DesignSpec } from '@/lib/design'
+import {
+  PanelRightClose,
+  PanelRightOpen,
+  Pipette,
+  RotateCcw,
+  Check,
+  SlidersHorizontal,
+  Wand2,
+  ArrowUp,
+} from 'lucide-react'
+import { TEMPLATE_LABELS, TEMPLATE_PALETTES, type DesignSpec } from '@/lib/design'
 import { cn } from '@/lib/utils'
 
 /* ------------------------------------------------------------------ */
@@ -79,7 +88,7 @@ function readableText(hex: string) {
 /* ------------------------------------------------------------------ */
 
 const PRESET_SWATCHES: { hex: string; name: string }[] = [
-  { hex: '#EE4D2D', name: 'Shopee Orange' },
+  { hex: '#EE4D2D', name: 'Commerce Orange' },
   { hex: '#FF6B00', name: 'Transaction Amber' },
   { hex: '#10B981', name: 'Money Emerald' },
   { hex: '#3B82F6', name: 'Academic Blue' },
@@ -93,8 +102,38 @@ const PRESET_SWATCHES: { hex: string; name: string }[] = [
   { hex: '#0EA5E9', name: 'Sky Cyan' },
 ]
 
+// A large, deterministic spectrum used by the scrollable matrix grid.
+// 24 hue rows × 8 tint/shade columns + a grayscale row = 200 tokens.
+const MATRIX_ROWS: string[][] = (() => {
+  const hues = Array.from({ length: 24 }, (_, i) => i * 15)
+  const rows = hues.map((h) =>
+    Array.from({ length: 8 }, (_, i) => {
+      const t = i / 7
+      const s = clamp01(0.25 + t * 0.72)
+      const v = clamp01(0.99 - t * 0.66)
+      return hsvToHex(h, s, v)
+    }),
+  )
+  const grays = Array.from({ length: 8 }, (_, i) => hsvToHex(0, 0, 1 - i / 7))
+  return [...rows, grays]
+})()
+
 /* ------------------------------------------------------------------ */
-/* Pane 3 — Dynamic Layout Modifiers & 2D Color Area Canvas Matrix     */
+/* Universal App Input — industry quick-action seeds.                  */
+/* ------------------------------------------------------------------ */
+
+const INDUSTRY_SEEDS: { label: string; seed: string }[] = [
+  { label: 'Government', seed: 'A government public service portal for citizens to pay bills' },
+  { label: 'Fintech', seed: 'A digital wallet and peer-to-peer money transfer app' },
+  { label: 'Food', seed: 'A food delivery app with a menu, cart and checkout' },
+  { label: 'E-commerce', seed: 'A fashion e-commerce store with cart and checkout' },
+  { label: 'Health', seed: 'A telemedicine clinic with appointment booking' },
+  { label: 'Education', seed: 'An online learning app with courses and quizzes' },
+]
+
+/* ------------------------------------------------------------------ */
+/* Pane 3 — Unified Configuration Matrix                               */
+/* Universal App Input fields + 2D Color Area Canvas + scroll matrix.  */
 /* ------------------------------------------------------------------ */
 
 export function ThemeDrawer({
@@ -103,12 +142,24 @@ export function ThemeDrawer({
   onToggle,
   onApplyAccent,
   disabled,
+  prompt,
+  onPromptChange,
+  onGenerate,
+  onIndustry,
+  onAppNameChange,
+  generating,
 }: {
   spec: DesignSpec
   open: boolean
   onToggle: () => void
   onApplyAccent: (hex: string) => void
   disabled: boolean
+  prompt: string
+  onPromptChange: (v: string) => void
+  onGenerate: () => void
+  onIndustry: (seed: string) => void
+  onAppNameChange: (v: string) => void
+  generating: boolean
 }) {
   const initial = hexToHsv(spec.palette.accent) ?? { h: 20, s: 0.85, v: 0.93 }
   const [hue, setHue] = useState(initial.h)
@@ -116,6 +167,11 @@ export function ThemeDrawer({
   const [val, setVal] = useState(initial.v)
   const [dragging, setDragging] = useState(false)
   const areaRef = useRef<HTMLDivElement>(null)
+
+  // Scrollable matrix drag-capture state.
+  const [matrixDrag, setMatrixDrag] = useState(false)
+  const [preview, setPreview] = useState<string | null>(null)
+  const previewRef = useRef<string | null>(null)
 
   // Sync the cursor to the live accent whenever a new spec/theme lands
   // (generation, session switch) — but never mid-drag.
@@ -147,23 +203,58 @@ export function ThemeDrawer({
     [disabled, onApplyAccent],
   )
 
-  const applySwatch = (swatchHex: string) => {
-    const parsed = hexToHsv(swatchHex)
-    if (!parsed) return
-    setHue(parsed.h)
-    setSat(parsed.s)
-    setVal(parsed.v)
-    commit(swatchHex.toUpperCase())
+  const captureHex = useCallback(
+    (nextHex: string) => {
+      const parsed = hexToHsv(nextHex)
+      if (parsed) {
+        setHue(parsed.h)
+        setSat(parsed.s)
+        setVal(parsed.v)
+      }
+      commit(nextHex.toUpperCase())
+    },
+    [commit],
+  )
+
+  // Commit the last hovered swatch when the matrix drag / tap ends anywhere.
+  useEffect(() => {
+    if (!matrixDrag) return
+    const end = () => {
+      setMatrixDrag(false)
+      if (previewRef.current) captureHex(previewRef.current)
+      setPreview(null)
+      previewRef.current = null
+    }
+    window.addEventListener('pointerup', end)
+    return () => window.removeEventListener('pointerup', end)
+  }, [matrixDrag, captureHex])
+
+  const beginMatrix = (swatch: string) => {
+    if (disabled) return
+    setMatrixDrag(true)
+    setPreview(swatch)
+    previewRef.current = swatch
   }
 
-  const resetToTemplate = () => {
-    const base = TEMPLATE_PALETTES[spec.template].accent
-    applySwatch(base)
+  const hoverMatrix = (swatch: string) => {
+    if (!matrixDrag) return
+    setPreview(swatch)
+    previewRef.current = swatch
   }
+
+  const resetToTemplate = () => captureHex(TEMPLATE_PALETTES[spec.template].accent)
+
+  const detected = useMemo(
+    () => ({
+      industry: spec.industry || 'Awaiting prompt…',
+      template: TEMPLATE_LABELS[spec.template],
+    }),
+    [spec.industry, spec.template],
+  )
 
   return (
     <motion.aside
-      animate={{ width: open ? 300 : 52 }}
+      animate={{ width: open ? 360 : 52 }}
       transition={{ duration: 0.3, ease: 'easeInOut' }}
       className="relative z-10 hidden shrink-0 flex-col border-l border-white/10 bg-[oklch(0.14_0_0)] lg:flex"
     >
@@ -171,7 +262,7 @@ export function ThemeDrawer({
       <div className="flex h-12 shrink-0 items-center gap-2 border-b border-white/10 px-3">
         <button
           onClick={onToggle}
-          aria-label={open ? 'Collapse modifiers' : 'Expand modifiers'}
+          aria-label={open ? 'Collapse configuration matrix' : 'Expand configuration matrix'}
           className="rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
         >
           {open ? (
@@ -182,8 +273,8 @@ export function ThemeDrawer({
         </button>
         {open && (
           <span className="flex items-center gap-1.5 text-sm font-medium text-white">
-            <Pipette className="h-4 w-4" />
-            Layout Modifiers
+            <SlidersHorizontal className="h-4 w-4" />
+            Configuration Matrix
           </span>
         )}
       </div>
@@ -193,10 +284,11 @@ export function ThemeDrawer({
         <div className="flex flex-1 flex-col items-center gap-3 pt-4">
           <button
             onClick={onToggle}
-            aria-label="Open theme matrix"
+            aria-label="Open configuration matrix"
             className="h-7 w-7 rounded-full ring-2 ring-white/15"
             style={{ backgroundColor: spec.palette.accent }}
           />
+          <Pipette className="h-4 w-4 text-white/40" />
         </div>
       )}
 
@@ -208,7 +300,110 @@ export function ThemeDrawer({
             exit={{ opacity: 0 }}
             className="thin-scroll flex-1 space-y-5 overflow-y-auto p-4"
           >
-            {/* 2D color area canvas — saturation (X) × value (Y) */}
+            {/* ---------------------------------------------------------- */}
+            {/* Universal App Input (legacy spec) — 100% white-label.       */}
+            {/* ---------------------------------------------------------- */}
+            <section className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                Describe Any App
+              </p>
+              <div className="rounded-lg border border-white/10 bg-black/30 p-2 focus-within:border-white/30">
+                <textarea
+                  value={prompt}
+                  onChange={(e) => onPromptChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === 'Enter' &&
+                      !e.shiftKey &&
+                      !e.nativeEvent.isComposing &&
+                      e.keyCode !== 229
+                    ) {
+                      e.preventDefault()
+                      onGenerate()
+                    }
+                  }}
+                  rows={2}
+                  placeholder="Describe any app in any language — the engine detects the industry and brands it for you."
+                  className="w-full resize-none bg-transparent px-1 py-0.5 text-xs leading-relaxed text-white placeholder:text-white/40 focus:outline-none"
+                />
+                <div className="flex items-center justify-between px-1 pt-1">
+                  <span className="text-[9px] text-white/40">Enter to generate</span>
+                  <button
+                    onClick={onGenerate}
+                    disabled={!prompt.trim() || generating}
+                    aria-label="Generate app"
+                    className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-white text-black transition-opacity hover:opacity-90 disabled:opacity-40"
+                  >
+                    {generating ? (
+                      <Wand2 className="h-3.5 w-3.5 animate-pulse" />
+                    ) : (
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                Try An Industry
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {INDUSTRY_SEEDS.map((it) => (
+                  <button
+                    key={it.label}
+                    onClick={() => onIndustry(it.seed)}
+                    disabled={generating}
+                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] font-medium text-white/70 transition-colors hover:border-white/30 hover:text-white disabled:opacity-40"
+                  >
+                    {it.label}
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                App Name / Brand
+              </p>
+              <input
+                value={spec.appName}
+                onChange={(e) => onAppNameChange(e.target.value)}
+                placeholder="Auto-branded from your prompt"
+                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm font-medium text-white placeholder:text-white/40 focus:border-white/30 focus:outline-none"
+              />
+            </section>
+
+            <section className="space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                Detected Context
+              </p>
+              <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3 py-2">
+                <div className="flex items-center gap-1">
+                  {(['bg', 'surface', 'accent', 'text'] as const).map((k) => (
+                    <span
+                      key={k}
+                      className="h-4 w-4 rounded-full ring-1 ring-white/15"
+                      style={{ backgroundColor: spec.palette[k] }}
+                    />
+                  ))}
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-semibold leading-tight text-white">
+                    {detected.industry}
+                  </p>
+                  <p className="truncate text-[9px] leading-tight text-white/40">
+                    {detected.template}
+                  </p>
+                </div>
+              </div>
+            </section>
+
+            <div className="h-px bg-white/10" />
+
+            {/* ---------------------------------------------------------- */}
+            {/* 2D color area canvas — saturation (X) × value (Y)          */}
+            {/* ---------------------------------------------------------- */}
             <section className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
                 2D Color Area Canvas
@@ -234,11 +429,8 @@ export function ThemeDrawer({
                 className="relative h-40 w-full cursor-crosshair rounded-lg"
                 style={{ backgroundColor: `hsl(${hue}, 100%, 50%)` }}
               >
-                {/* white → transparent (saturation) */}
                 <div className="pointer-events-none absolute inset-0 rounded-lg bg-[linear-gradient(to_right,#fff,transparent)]" />
-                {/* transparent → black (value) */}
                 <div className="pointer-events-none absolute inset-0 rounded-lg bg-[linear-gradient(to_top,#000,transparent)]" />
-                {/* cursor selector */}
                 <span
                   className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.4)]"
                   style={{
@@ -265,10 +457,10 @@ export function ThemeDrawer({
               <div className="flex items-center gap-2">
                 <span
                   className="h-8 w-8 shrink-0 rounded-md ring-1 ring-white/15"
-                  style={{ backgroundColor: hex }}
+                  style={{ backgroundColor: preview ?? hex }}
                 />
                 <code className="flex-1 rounded-md border border-white/10 bg-black/30 px-2 py-1.5 font-mono text-xs text-white">
-                  {hex}
+                  {preview ?? hex}
                 </code>
                 <button
                   onClick={() => commit(hex)}
@@ -282,10 +474,10 @@ export function ThemeDrawer({
               </div>
             </section>
 
-            {/* Preset palette matrix grid */}
+            {/* Quick brand swatches */}
             <section className="space-y-2">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
-                Palette Matrix
+                Brand Swatches
               </p>
               <div className="grid grid-cols-6 gap-1.5">
                 {PRESET_SWATCHES.map((sw) => {
@@ -294,7 +486,7 @@ export function ThemeDrawer({
                   return (
                     <button
                       key={sw.hex}
-                      onClick={() => applySwatch(sw.hex)}
+                      onClick={() => captureHex(sw.hex)}
                       disabled={disabled}
                       title={`${sw.name} · ${sw.hex}`}
                       aria-label={`${sw.name} ${sw.hex}`}
@@ -306,6 +498,47 @@ export function ThemeDrawer({
                     />
                   )
                 })}
+              </div>
+            </section>
+
+            {/* ---------------------------------------------------------- */}
+            {/* Scrollable Color Palette Matrix Grid — drag to capture.     */}
+            {/* ---------------------------------------------------------- */}
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-white/50">
+                  Palette Matrix Grid
+                </p>
+                <span className="text-[9px] text-white/40">drag to capture</span>
+              </div>
+              <div
+                className="thin-scroll max-h-48 touch-none overflow-y-scroll rounded-lg border border-white/10 bg-black/20 p-1.5"
+                style={{ overflowY: 'scroll' }}
+              >
+                <div className="grid grid-cols-8 gap-1">
+                  {MATRIX_ROWS.flat().map((swatch, i) => {
+                    const active =
+                      swatch.toUpperCase() === spec.palette.accent.toUpperCase()
+                    return (
+                      <button
+                        key={`${swatch}-${i}`}
+                        onPointerDown={(e) => {
+                          e.preventDefault()
+                          beginMatrix(swatch)
+                        }}
+                        onPointerEnter={() => hoverMatrix(swatch)}
+                        disabled={disabled}
+                        title={swatch}
+                        aria-label={`Palette token ${swatch}`}
+                        className={cn(
+                          'aspect-square rounded-sm ring-1 ring-white/5 transition-transform hover:z-10 hover:scale-125 disabled:opacity-40',
+                          active && 'ring-2 ring-white',
+                        )}
+                        style={{ backgroundColor: swatch }}
+                      />
+                    )
+                  })}
+                </div>
               </div>
             </section>
 
@@ -345,8 +578,9 @@ export function ThemeDrawer({
             </button>
 
             <p className="text-[10px] leading-relaxed text-white/40">
-              Drag the selector to intercept a live hex, then apply to run a
-              3.6s theme-hydration loop across the active simulator frame.
+              Drag across the matrix to intercept a live hex token, then release
+              to run a 3.6s theme-hydration loop across the active simulator
+              frame.
             </p>
           </motion.div>
         )}
