@@ -13,7 +13,7 @@ export const maxDuration = 30
 const MODEL_FALLBACKS = ['google/gemini-2.5-flash', 'google/gemini-2.0-flash'] as const
 
 // Google Search grounding tool — gives the consultant live internet access.
-const googleSearchTool = google.tools.googleSearch()
+const googleSearchTool = google.tools.googleSearch({})
 
 type ChatTurn = { role: 'user' | 'assistant'; text: string }
 type SpecContext = {

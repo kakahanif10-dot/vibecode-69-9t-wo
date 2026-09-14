@@ -80,6 +80,11 @@ const RECOMMENDATIONS: Record<Template, Recommendation[]> = {
     { label: 'Play Snake', append: 'make a snake game' },
     { label: 'Play Tetris', append: 'make a tetris game' },
     { label: 'Play Dino Run', append: 'make a dino runner game' },
+    { label: 'Play Pong', append: 'make a pong game' },
+    { label: 'Play Breakout', append: 'make a breakout game' },
+    { label: 'Play Flappy', append: 'make a flappy bird game' },
+    { label: 'Play 2048', append: 'make a 2048 game' },
+    { label: 'Play Memory', append: 'make a memory card game' },
   ],
   generic: [
     { label: 'Stateful onboarding flow controller', append: 'add a stateful multi-step onboarding flow' },
@@ -102,7 +107,7 @@ export function introMessage(spec: DesignSpec): string {
   if (spec.template === 'game') {
     return (
       `${name} is live and fully playable right in the preview — hit Play and use the arrow keys, WASD, or the on-screen buttons (tap works too). ` +
-      `There are three games in the cabinet: Snake, Tetris, and Dino Run — switch between them with the tabs up top. ` +
+      `There are eight games in the cabinet: Snake, Tetris, Dino Run, Pong, Breakout, Flappy, 2048, and Memory — switch between them with the tabs up top. ` +
       `Want a different game or a tweak? Just tell me.`
     )
   }
