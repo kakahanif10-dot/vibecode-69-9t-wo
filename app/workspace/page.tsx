@@ -190,7 +190,14 @@ export default function WorkspacePage() {
     setChatting(true)
     setError(null)
     const userMsg: ConsultantMessage = { id: uid(), role: 'user', text }
-    setMessages((m) => [...m, userMsg])
+    // Add the user turn plus an empty assistant turn that fills in as tokens
+    // stream — this is what makes the consultant "type" like a person.
+    const assistantId = uid()
+    setMessages((m) => [
+      ...m,
+      userMsg,
+      { id: assistantId, role: 'assistant', text: '' },
+    ])
 
     try {
       const history = [...messages, userMsg]
@@ -209,30 +216,53 @@ export default function WorkspacePage() {
           },
         }),
       })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
-        throw new Error(data?.error || 'Chat failed')
+      if (!res.ok || !res.body) {
+        throw new Error(`Chat failed (${res.status})`)
       }
-      setMessages((m) => [...m, { id: uid(), role: 'assistant', text: data.reply }])
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let acc = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        acc += decoder.decode(value, { stream: true })
+        setMessages((m) =>
+          m.map((msg) => (msg.id === assistantId ? { ...msg, text: acc } : msg)),
+        )
+      }
+
+      if (!acc.trim()) {
+        setMessages((m) =>
+          m.map((msg) =>
+            msg.id === assistantId
+              ? { ...msg, text: "Sorry, I couldn't reply just now. Try again in a moment." }
+              : msg,
+          ),
+        )
+      }
     } catch (err) {
-      setMessages((m) => [
-        ...m,
-        {
-          id: uid(),
-          role: 'assistant',
-          text: `Sorry, I couldn't reply just now: ${(err as Error).message}. Try again in a moment.`,
-        },
-      ])
+      setMessages((m) =>
+        m.map((msg) =>
+          msg.id === assistantId
+            ? {
+                ...msg,
+                text: `Sorry, I couldn't reply just now: ${(err as Error).message}. Try again in a moment.`,
+              }
+            : msg,
+        ),
+      )
     } finally {
       setChatting(false)
     }
   }
 
-  // Words (EN + ID) that signal the user wants to build/modify the app rather
-  // than just chat. First message always builds; afterwards, build-intent
-  // messages compile while everything else gets a conversational reply.
+  // Action verbs (EN + ID) that signal the user wants to build/modify the app
+  // rather than just chat. First message always builds; afterwards, only these
+  // action-intent messages compile — plain nouns like "app" or "store" no
+  // longer force a rebuild, so ordinary conversation stays conversational.
   const BUILD_INTENT =
-    /\b(add|create|build|make|generate|redesign|design|change|update|remove|delete|turn|convert|rebuild|buat|bikin|tambah|ubah|ganti|hapus|jadikan|aplikasi|app|website|store|toko|dashboard)\b/i
+    /\b(add|create|build|make|generate|redesign|design|change|update|remove|delete|turn|convert|rebuild|buat|bikin|tambah|ubah|ganti|hapus|jadikan|tambahkan|hilangkan)\b/i
 
   const handleSend = () => {
     const text = prompt.trim()
@@ -357,7 +387,8 @@ export default function WorkspacePage() {
               onGenerate={handleSend}
               onRecommendation={handleRecommendation}
               onExport={handleExport}
-              generating={generating || chatting}
+              generating={generating}
+              chatting={chatting}
               error={error}
               messages={messages}
               spec={spec}

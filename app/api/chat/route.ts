@@ -4,7 +4,7 @@
 // through the Vercel AI Gateway (zero-config auth, no provider key) and always
 // degrades to a coherent local reply so the consultant never goes silent.
 
-import { generateText, type ModelMessage } from 'ai'
+import { streamText, type ModelMessage } from 'ai'
 
 export const maxDuration = 30
 
@@ -27,9 +27,10 @@ function systemPrompt(spec: SpecContext): string {
   return `You are the Vibecode Inc. AI Consultant — a warm, sharp, senior product engineer having a live chat with a builder. ${ctx}
 
 Rules:
-- Reply conversationally and naturally, like a helpful teammate. Match the user's language (English or Indonesian).
-- Be concise: 1-3 short sentences unless the user explicitly asks for detail.
-- Answer questions, give opinions, and suggest concrete next steps.
+- Talk like a real person, not a manual. Use natural, warm phrasing, contractions, and a bit of personality. React to what the user actually said.
+- Match the user's language and tone (English or Indonesian), and mirror their level of formality.
+- Be concise: 1-3 short sentences unless the user explicitly asks for detail. It's fine to ask a quick follow-up question when it helps.
+- Answer questions, give real opinions, and suggest concrete next steps.
 - If the user asks you to build, add, change, or remove a feature, briefly confirm and tell them to send it so you can compile the app — do NOT output code or JSON.
 - Never return markdown code fences or raw JSON. Just talk.`
 }
@@ -43,24 +44,43 @@ function toModelMessages(turns: ChatTurn[]): ModelMessage[] {
     }))
 }
 
-async function callChat(spec: SpecContext, turns: ChatTurn[]): Promise<string> {
-  let lastError: unknown = null
+// Stream a reply token-by-token so the consultant "types" like a person.
+// Tries each model in turn; if every model is unavailable, it streams a
+// coherent local reply word-by-word so the consultant never goes silent.
+async function streamReply(
+  spec: SpecContext,
+  turns: ChatTurn[],
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder,
+): Promise<void> {
   for (const model of MODEL_FALLBACKS) {
     try {
-      const { text } = await generateText({
+      const result = streamText({
         model,
         system: systemPrompt(spec),
         messages: toModelMessages(turns),
-        temperature: 0.6,
+        temperature: 0.7,
         maxOutputTokens: 512,
       })
-      if (text?.trim()) return text.trim()
-      lastError = new Error(`Model "${model}" returned an empty response`)
+      let streamed = false
+      for await (const delta of result.textStream) {
+        if (delta) {
+          streamed = true
+          controller.enqueue(encoder.encode(delta))
+        }
+      }
+      if (streamed) return
     } catch (err) {
-      lastError = err
+      console.log('[v0] Chat model failed:', model, (err as Error)?.message)
     }
   }
-  throw new Error((lastError as Error)?.message ?? 'All chat models are overloaded.')
+
+  // Every model failed — degrade to a local reply, streamed for a human feel.
+  const reply = localReply(spec, turns)
+  for (const word of reply.split(' ')) {
+    controller.enqueue(encoder.encode(word + ' '))
+    await new Promise((r) => setTimeout(r, 16))
+  }
 }
 
 // Deterministic, context-aware fallback so the consultant always answers even
@@ -101,11 +121,24 @@ export async function POST(req: Request) {
     return Response.json({ success: false, error: 'A user message is required' }, { status: 400 })
   }
 
-  try {
-    const reply = await callChat(spec, turns)
-    return Response.json({ success: true, engine: 'ai', reply })
-  } catch (error) {
-    console.log('[v0] Chat engine unavailable, using local reply:', (error as Error)?.message)
-    return Response.json({ success: true, engine: 'local', reply: localReply(spec, turns) })
-  }
+  const encoder = new TextEncoder()
+  const stream = new ReadableStream({
+    async start(controller) {
+      try {
+        await streamReply(spec, turns, controller, encoder)
+      } catch (error) {
+        console.log('[v0] Chat stream failed, using local reply:', (error as Error)?.message)
+        controller.enqueue(encoder.encode(localReply(spec, turns)))
+      } finally {
+        controller.close()
+      }
+    },
+  })
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/plain; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+    },
+  })
 }

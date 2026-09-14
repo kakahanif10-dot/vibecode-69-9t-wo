@@ -34,6 +34,7 @@ export function ConsultantPanel({
   onRecommendation,
   onExport,
   generating,
+  chatting = false,
   error,
   messages,
   spec,
@@ -44,17 +45,19 @@ export function ConsultantPanel({
   onRecommendation: (rec: Recommendation) => void
   onExport: () => void
   generating: boolean
+  chatting?: boolean
   error: string | null
   messages: ConsultantMessage[]
   spec: DesignSpec
 }) {
   const endRef = useRef<HTMLDivElement>(null)
+  const busy = generating || chatting
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, generating])
+  }, [messages, generating, chatting])
 
-  const empty = messages.length === 0 && !generating
+  const empty = messages.length === 0 && !busy
 
   return (
     <div className="flex h-full flex-col bg-background">
@@ -80,7 +83,7 @@ export function ConsultantPanel({
               key={m.id}
               message={m}
               onRecommendation={onRecommendation}
-              disabled={generating}
+              disabled={busy}
             />
           ),
         )}
@@ -148,11 +151,11 @@ export function ConsultantPanel({
             </span>
             <button
               onClick={onGenerate}
-              disabled={!prompt.trim() || generating}
+              disabled={!prompt.trim() || busy}
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-foreground text-background transition-opacity hover:opacity-90 disabled:opacity-40"
               aria-label="Generate app"
             >
-              {generating ? (
+              {busy ? (
                 <Wand2 className="h-4 w-4 animate-pulse" />
               ) : (
                 <ArrowUp className="h-4 w-4" />
@@ -243,7 +246,15 @@ function AssistantBubble({
       <VibecodeMark className="mt-0.5 h-7 w-7 shrink-0" />
       <div className="max-w-[85%] space-y-2">
         <div className="rounded-2xl rounded-tl-sm border border-border bg-card/70 px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
-          {message.text}
+          {message.text ? (
+            message.text
+          ) : (
+            <span className="inline-flex gap-1 py-1 align-middle" aria-label="Assistant is typing">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.2s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.1s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground" />
+            </span>
+          )}
         </div>
         {message.recommendations && message.recommendations.length > 0 && (
           <div className="flex flex-col gap-1.5">
