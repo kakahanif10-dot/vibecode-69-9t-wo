@@ -164,11 +164,11 @@ export function ConsultantPanel({
         <button
           onClick={onExport}
           disabled={!spec.hasContent || generating}
-          className="group relative mt-2 inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-cyan-400/50 bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-sm font-semibold tracking-wide text-white shadow-[0_0_18px_-2px_rgba(34,211,238,0.65)] transition-all hover:shadow-[0_0_28px_0px_rgba(34,211,238,0.85)] disabled:cursor-not-allowed disabled:border-border disabled:from-transparent disabled:to-transparent disabled:text-foreground disabled:shadow-none disabled:opacity-40"
+          className="group relative mt-2 inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold tracking-wide text-black shadow-[0_0_18px_-2px_rgba(255,255,255,0.7)] transition-all hover:shadow-[0_0_30px_0px_rgba(255,255,255,0.95)] disabled:cursor-not-allowed disabled:border-border disabled:bg-transparent disabled:text-foreground disabled:shadow-none disabled:opacity-40"
         >
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-0 animate-pulse rounded-xl bg-cyan-300/20 group-disabled:hidden"
+            className="pointer-events-none absolute inset-0 animate-pulse rounded-xl bg-white/30 group-disabled:hidden"
           />
           <Download className="relative h-4 w-4" />
           <span className="relative">DOWNLOAD APP</span>
