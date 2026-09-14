@@ -20,9 +20,11 @@ type Device = 'mobile' | 'desktop'
 export function ResponsivePreview({
   spec,
   building,
+  onEdit,
 }: {
   spec: DesignSpec
   building: boolean
+  onEdit?: (updater: (s: DesignSpec) => DesignSpec) => void
 }) {
   const [device, setDevice] = useState<Device>('mobile')
   const [galleryOpen, setGalleryOpen] = useState(false)
@@ -77,6 +79,7 @@ export function ResponsivePreview({
             building={building}
             attachment={attachment}
             onClearAttachment={() => setAttachment(null)}
+            onEdit={onEdit}
           />
         ) : (
           <DesktopFrame
@@ -84,6 +87,7 @@ export function ResponsivePreview({
             building={building}
             attachment={attachment}
             onClearAttachment={() => setAttachment(null)}
+            onEdit={onEdit}
           />
         )}
 
@@ -171,11 +175,13 @@ function DesktopFrame({
   building,
   attachment,
   onClearAttachment,
+  onEdit,
 }: {
   spec: DesignSpec
   building: boolean
   attachment?: string | null
   onClearAttachment?: () => void
+  onEdit?: (updater: (s: DesignSpec) => DesignSpec) => void
 }) {
   return (
     <div className="flex h-full items-center justify-center p-6">
@@ -224,7 +230,7 @@ function DesktopFrame({
             </motion.div>
           )}
           <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col overflow-hidden">
-            <AppPreview spec={spec} />
+            <AppPreview spec={spec} onEdit={onEdit} />
           </div>
         </div>
       </motion.div>

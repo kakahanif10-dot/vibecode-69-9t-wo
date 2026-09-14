@@ -1,0 +1,111 @@
+// VIBECODE INC. — Conversational consultant endpoint.
+// Powers real, responsive back-and-forth chat with the AI consultant (distinct
+// from /api/generate, which compiles a full app spec). Runs on the AI SDK
+// through the Vercel AI Gateway (zero-config auth, no provider key) and always
+// degrades to a coherent local reply so the consultant never goes silent.
+
+import { generateText, type ModelMessage } from 'ai'
+
+export const maxDuration = 30
+
+// Ordered fallbacks tried when the primary model is overloaded or rate-limited.
+const MODEL_FALLBACKS = ['google/gemini-2.5-flash', 'google/gemini-2.0-flash'] as const
+
+type ChatTurn = { role: 'user' | 'assistant'; text: string }
+type SpecContext = {
+  appName?: string
+  industry?: string
+  template?: string
+  hasContent?: boolean
+}
+
+function systemPrompt(spec: SpecContext): string {
+  const ctx = spec.hasContent
+    ? `The user is currently working on an app called "${spec.appName}" in the "${spec.industry}" vertical (template: ${spec.template}). Ground your answers in that app when relevant.`
+    : `The user has not generated an app yet. Encourage them to describe the product they want to build.`
+
+  return `You are the Vibecode Inc. AI Consultant — a warm, sharp, senior product engineer having a live chat with a builder. ${ctx}
+
+Rules:
+- Reply conversationally and naturally, like a helpful teammate. Match the user's language (English or Indonesian).
+- Be concise: 1-3 short sentences unless the user explicitly asks for detail.
+- Answer questions, give opinions, and suggest concrete next steps.
+- If the user asks you to build, add, change, or remove a feature, briefly confirm and tell them to send it so you can compile the app — do NOT output code or JSON.
+- Never return markdown code fences or raw JSON. Just talk.`
+}
+
+function toModelMessages(turns: ChatTurn[]): ModelMessage[] {
+  return turns
+    .filter((t) => t && typeof t.text === 'string' && t.text.trim())
+    .map((t) => ({
+      role: t.role === 'assistant' ? 'assistant' : 'user',
+      content: t.text.trim(),
+    }))
+}
+
+async function callChat(spec: SpecContext, turns: ChatTurn[]): Promise<string> {
+  let lastError: unknown = null
+  for (const model of MODEL_FALLBACKS) {
+    try {
+      const { text } = await generateText({
+        model,
+        system: systemPrompt(spec),
+        messages: toModelMessages(turns),
+        temperature: 0.6,
+        maxOutputTokens: 512,
+      })
+      if (text?.trim()) return text.trim()
+      lastError = new Error(`Model "${model}" returned an empty response`)
+    } catch (err) {
+      lastError = err
+    }
+  }
+  throw new Error((lastError as Error)?.message ?? 'All chat models are overloaded.')
+}
+
+// Deterministic, context-aware fallback so the consultant always answers even
+// when the Gateway is unavailable. No randomness — same input, same reply.
+function localReply(spec: SpecContext, turns: ChatTurn[]): string {
+  const last = [...turns].reverse().find((t) => t.role === 'user')?.text?.toLowerCase() ?? ''
+  const app = spec.appName && spec.hasContent ? spec.appName : 'your app'
+
+  const isBuild = /\b(add|create|build|make|change|update|remove|delete|buat|bikin|tambah|ubah|ganti|hapus)\b/.test(last)
+  if (isBuild) {
+    return `Got it — send that as a prompt and I'll compile it straight into ${app}.`
+  }
+  if (/\?|how|what|why|apa|bagaimana|kenapa|gimana/.test(last)) {
+    return spec.hasContent
+      ? `Good question. For ${app} (${spec.industry}), I'd focus on the core flow first — tell me which screen you want to refine and I'll suggest specifics.`
+      : `Happy to help — describe the product you have in mind (industry, audience, key action) and I'll brand and compile a working preview.`
+  }
+  if (/\b(hi|hello|hey|halo|hai)\b/.test(last)) {
+    return `Hey! I'm your Vibecode consultant. Describe an app idea and I'll detect the industry, brand it, and build a live preview.`
+  }
+  return spec.hasContent
+    ? `Understood. Tell me what you'd like to adjust on ${app} and I'll take it from there.`
+    : `Tell me about the app you want to build and I'll get started.`
+}
+
+export async function POST(req: Request) {
+  let turns: ChatTurn[] = []
+  let spec: SpecContext = {}
+  try {
+    const body = await req.json()
+    if (Array.isArray(body?.messages)) turns = body.messages as ChatTurn[]
+    if (body?.spec && typeof body.spec === 'object') spec = body.spec as SpecContext
+  } catch {
+    return Response.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  if (!turns.some((t) => t?.role === 'user' && t?.text?.trim())) {
+    return Response.json({ success: false, error: 'A user message is required' }, { status: 400 })
+  }
+
+  try {
+    const reply = await callChat(spec, turns)
+    return Response.json({ success: true, engine: 'ai', reply })
+  } catch (error) {
+    console.log('[v0] Chat engine unavailable, using local reply:', (error as Error)?.message)
+    return Response.json({ success: true, engine: 'local', reply: localReply(spec, turns) })
+  }
+}

@@ -69,6 +69,7 @@ export default function WorkspacePage() {
   const [spec, setSpec] = useState<DesignSpec>(DEFAULT_SPEC)
   const [messages, setMessages] = useState<ConsultantMessage[]>([])
   const [generating, setGenerating] = useState(false)
+  const [chatting, setChatting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [collapsed, setCollapsed] = useState(false)
@@ -182,11 +183,69 @@ export default function WorkspacePage() {
     }
   }
 
-  const handleGenerate = () => {
-    const userPrompt = prompt.trim()
-    if (!userPrompt) return
+  // Conversational reply path — the consultant actually talks back (distinct
+  // from compiling an app). Backed by /api/chat with a local fallback.
+  const runChat = async (text: string) => {
+    if (chatting || generating) return
+    setChatting(true)
+    setError(null)
+    const userMsg: ConsultantMessage = { id: uid(), role: 'user', text }
+    setMessages((m) => [...m, userMsg])
+
+    try {
+      const history = [...messages, userMsg]
+        .slice(-10)
+        .map((m) => ({ role: m.role, text: m.text }))
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: history,
+          spec: {
+            appName: spec.appName,
+            industry: spec.industry,
+            template: spec.template,
+            hasContent: spec.hasContent,
+          },
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data?.error || 'Chat failed')
+      }
+      setMessages((m) => [...m, { id: uid(), role: 'assistant', text: data.reply }])
+    } catch (err) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: uid(),
+          role: 'assistant',
+          text: `Sorry, I couldn't reply just now: ${(err as Error).message}. Try again in a moment.`,
+        },
+      ])
+    } finally {
+      setChatting(false)
+    }
+  }
+
+  // Words (EN + ID) that signal the user wants to build/modify the app rather
+  // than just chat. First message always builds; afterwards, build-intent
+  // messages compile while everything else gets a conversational reply.
+  const BUILD_INTENT =
+    /\b(add|create|build|make|generate|redesign|design|change|update|remove|delete|turn|convert|rebuild|buat|bikin|tambah|ubah|ganti|hapus|jadikan|aplikasi|app|website|store|toko|dashboard)\b/i
+
+  const handleSend = () => {
+    const text = prompt.trim()
+    if (!text || generating || chatting) return
     setPrompt('')
-    void runGenerate(userPrompt, userPrompt)
+    if (!spec.hasContent) {
+      void runGenerate(text, text)
+    } else if (BUILD_INTENT.test(text)) {
+      const base = lastPrompt || spec.industry || 'the current app'
+      void runGenerate(`${base}. Also ${text}.`, text)
+    } else {
+      void runChat(text)
+    }
   }
 
   const handleRecommendation = (rec: Recommendation) => {
@@ -295,10 +354,10 @@ export default function WorkspacePage() {
             <ConsultantPanel
               prompt={prompt}
               onPromptChange={setPrompt}
-              onGenerate={handleGenerate}
+              onGenerate={handleSend}
               onRecommendation={handleRecommendation}
               onExport={handleExport}
-              generating={generating}
+              generating={generating || chatting}
               error={error}
               messages={messages}
               spec={spec}
@@ -306,7 +365,11 @@ export default function WorkspacePage() {
           </div>
 
           <div className="hidden min-h-0 lg:block">
-            <ResponsivePreview spec={spec} building={generating || hydrating} />
+            <ResponsivePreview
+              spec={spec}
+              building={generating || hydrating}
+              onEdit={(updater) => setSpec((s) => updater(s))}
+            />
           </div>
 
           <ThemeDrawer
@@ -317,10 +380,10 @@ export default function WorkspacePage() {
             disabled={!spec.hasContent || generating}
             prompt={prompt}
             onPromptChange={setPrompt}
-            onGenerate={handleGenerate}
+            onGenerate={handleSend}
             onIndustry={handleIndustry}
             onAppNameChange={handleAppNameChange}
-            generating={generating}
+            generating={generating || chatting}
           />
         </div>
       </div>
