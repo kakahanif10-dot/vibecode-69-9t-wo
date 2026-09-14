@@ -3,7 +3,15 @@
 // industry from the prompt, picks a functional multi-page `template`, and
 // emits a matching hex `palette` + an industry-specific `catalog`.
 
-export type Template = 'government' | 'food' | 'ecommerce' | 'generic'
+export type Template =
+  | 'government'
+  | 'fintech'
+  | 'edutech'
+  | 'food'
+  | 'ecommerce'
+  | 'health'
+  | 'saas'
+  | 'generic'
 
 export type Palette = {
   bg: string
@@ -40,15 +48,36 @@ export type DesignSpec = {
 // override individual hex values; anything invalid falls back to these so the
 // preview is always coherent for the detected industry.
 export const TEMPLATE_PALETTES: Record<Template, Palette> = {
-  // Institutional: navy authority + steel + orange tax-warning accent.
+  // Institutional civic authority: deep navy + slate silver + alert amber.
+  // Production tokens: #0A192F navy, #8892B0 slate, #FF6B00 transaction accent.
   government: {
-    bg: '#0a1626',
-    surface: '#12253c',
-    border: 'rgba(148,163,184,0.20)',
-    text: '#eaf1f9',
+    bg: '#0A192F',
+    surface: '#112240',
+    border: 'rgba(136,146,176,0.22)',
+    text: '#E6F1FF',
+    muted: '#8892B0',
+    accent: '#FF6B00',
+    accentText: '#0A192F',
+  },
+  // Fintech trust + growth: near-black vault + emerald money accent.
+  fintech: {
+    bg: '#06120f',
+    surface: '#0d2320',
+    border: 'rgba(45,212,191,0.18)',
+    text: '#e9fbf4',
+    muted: '#86a89a',
+    accent: '#10b981',
+    accentText: '#04140b',
+  },
+  // EduTech: friendly, focused deep blue with a bright academic accent.
+  edutech: {
+    bg: '#0b1226',
+    surface: '#16203f',
+    border: 'rgba(96,165,250,0.20)',
+    text: '#eaf1ff',
     muted: '#93a7c4',
-    accent: '#f97316',
-    accentText: '#0a1626',
+    accent: '#3b82f6',
+    accentText: '#ffffff',
   },
   // Warm earth tones: espresso, cream, forest green.
   food: {
@@ -60,14 +89,35 @@ export const TEMPLATE_PALETTES: Record<Template, Palette> = {
     accent: '#3f9c5f',
     accentText: '#04140b',
   },
-  // Bright, high-conversion marketplace energy (Shopee/Amazon-like).
+  // Bright commercial flagship (Shopee/Amazon-like): clean ivory canvas,
+  // pearl-white product cards, high-vis orange conversion accent (#EE4D2D).
   ecommerce: {
-    bg: '#0e1421',
-    surface: '#1a2333',
-    border: 'rgba(255,255,255,0.10)',
-    text: '#f6f8fc',
-    muted: '#9fb0cc',
-    accent: '#ff5a1f',
+    bg: '#F5F5F5',
+    surface: '#FFFFFF',
+    border: 'rgba(17,24,39,0.10)',
+    text: '#17181C',
+    muted: '#6B7280',
+    accent: '#EE4D2D',
+    accentText: '#FFFFFF',
+  },
+  // Clinical trust: deep teal, clean surfaces, healing teal-green accent.
+  health: {
+    bg: '#06171a',
+    surface: '#0f2b2e',
+    border: 'rgba(94,234,212,0.18)',
+    text: '#e6fbf7',
+    muted: '#8fb9b4',
+    accent: '#14b8a6',
+    accentText: '#03130f',
+  },
+  // Modern software: sleek near-black, violet product accent.
+  saas: {
+    bg: '#0b0b16',
+    surface: '#16162a',
+    border: 'rgba(139,124,246,0.18)',
+    text: '#f2f1fb',
+    muted: '#a5a3c4',
+    accent: '#8b5cf6',
     accentText: '#ffffff',
   },
   // Neutral fallback for anything else.
@@ -84,15 +134,23 @@ export const TEMPLATE_PALETTES: Record<Template, Palette> = {
 
 export const TEMPLATES: readonly Template[] = [
   'government',
+  'fintech',
+  'edutech',
   'food',
   'ecommerce',
+  'health',
+  'saas',
   'generic',
 ] as const
 
 export const TEMPLATE_LABELS: Record<Template, string> = {
   government: 'Government / Public Service',
+  fintech: 'Fintech / Banking',
+  edutech: 'EduTech / Learning',
   food: 'Food & Beverage',
   ecommerce: 'E-Commerce / Marketplace',
+  health: 'Health / Medical',
+  saas: 'SaaS / Productivity',
   generic: 'Universal App',
 }
 
