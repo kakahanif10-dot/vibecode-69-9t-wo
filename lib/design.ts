@@ -11,7 +11,11 @@ export type Template =
   | 'ecommerce'
   | 'health'
   | 'saas'
+  | 'game'
   | 'generic'
+
+// Which playable arcade game the preview should boot into when template==='game'.
+export type GameKind = 'snake' | 'tetris' | 'dino'
 
 export type Palette = {
   bg: string
@@ -41,6 +45,7 @@ export type DesignSpec = {
   primaryAction: string
   categories: string[] // filter chips / quick sections (up to 5)
   catalog: CatalogItem[] // menu items / products / services (up to 6)
+  game?: GameKind // when template==='game', which arcade game boots first
   hasContent: boolean // false = neutral "awaiting blueprint" state
 }
 
@@ -120,6 +125,16 @@ export const TEMPLATE_PALETTES: Record<Template, Palette> = {
     accent: '#8b5cf6',
     accentText: '#ffffff',
   },
+  // Retro arcade: black cabinet, neon-green phosphor glow.
+  game: {
+    bg: '#07060f',
+    surface: '#12101f',
+    border: 'rgba(74,222,128,0.22)',
+    text: '#e8ffe8',
+    muted: '#7c9a86',
+    accent: '#4ade80',
+    accentText: '#04140b',
+  },
   // Neutral fallback for anything else.
   generic: {
     bg: '#0a0a0a',
@@ -140,6 +155,7 @@ export const TEMPLATES: readonly Template[] = [
   'ecommerce',
   'health',
   'saas',
+  'game',
   'generic',
 ] as const
 
@@ -151,6 +167,7 @@ export const TEMPLATE_LABELS: Record<Template, string> = {
   ecommerce: 'E-Commerce / Marketplace',
   health: 'Health / Medical',
   saas: 'SaaS / Productivity',
+  game: 'Arcade / Game',
   generic: 'Universal App',
 }
 

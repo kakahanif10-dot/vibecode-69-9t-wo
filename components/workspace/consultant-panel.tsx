@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Sparkles,
@@ -213,6 +213,84 @@ function EmptyState({ onPick }: { onPick: (v: string) => void }) {
   )
 }
 
+// Lightweight, dependency-free markdown renderer for assistant replies.
+// Supports short headings (##, ###), bold (**text**), inline code (`code`),
+// and bullet lists (-, *). Everything else renders as plain paragraphs so the
+// consultant can add light structure without ever leaking raw markup.
+function renderInline(text: string, keyPrefix: string) {
+  // Split on **bold** and `code` while keeping the delimiters.
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean)
+  return parts.map((part, i) => {
+    const key = `${keyPrefix}-${i}`
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={key} className="font-semibold text-foreground">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code
+          key={key}
+          className="rounded bg-secondary px-1 py-0.5 font-mono text-[0.85em]"
+        >
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    return <span key={key}>{part}</span>
+  })
+}
+
+function RichText({ text }: { text: string }) {
+  const lines = text.split('\n')
+  const blocks: ReactNode[] = []
+  let bullets: string[] = []
+
+  const flushBullets = () => {
+    if (bullets.length === 0) return
+    const items = bullets
+    blocks.push(
+      <ul key={`ul-${blocks.length}`} className="space-y-1 pl-1">
+        {items.map((b, i) => (
+          <li key={i} className="flex gap-2">
+            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-muted-foreground" />
+            <span className="flex-1">{renderInline(b, `li-${blocks.length}-${i}`)}</span>
+          </li>
+        ))}
+      </ul>,
+    )
+    bullets = []
+  }
+
+  lines.forEach((raw, idx) => {
+    const line = raw.trimEnd()
+    const bullet = line.match(/^\s*[-*]\s+(.*)$/)
+    if (bullet) {
+      bullets.push(bullet[1])
+      return
+    }
+    flushBullets()
+    if (!line.trim()) return
+    const heading = line.match(/^\s*(#{2,3})\s+(.*)$/)
+    if (heading) {
+      blocks.push(
+        <p key={`h-${idx}`} className="text-[13px] font-semibold text-foreground">
+          {renderInline(heading[2], `h-${idx}`)}
+        </p>,
+      )
+      return
+    }
+    blocks.push(
+      <p key={`p-${idx}`}>{renderInline(line, `p-${idx}`)}</p>,
+    )
+  })
+  flushBullets()
+
+  return <div className="space-y-2">{blocks}</div>
+}
+
 function UserBubble({ text }: { text: string }) {
   return (
     <motion.div
@@ -247,7 +325,7 @@ function AssistantBubble({
       <div className="max-w-[85%] space-y-2">
         <div className="rounded-2xl rounded-tl-sm border border-border bg-card/70 px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
           {message.text ? (
-            message.text
+            <RichText text={message.text} />
           ) : (
             <span className="inline-flex gap-1 py-1 align-middle" aria-label="Assistant is typing">
               <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-muted-foreground [animation-delay:-0.2s]" />

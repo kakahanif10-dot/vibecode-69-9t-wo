@@ -10,6 +10,7 @@ import {
   TEMPLATES,
   type CatalogItem,
   type DesignSpec,
+  type GameKind,
   type Palette,
   type Template,
 } from '@/lib/design'
@@ -232,6 +233,70 @@ function toCatalog(value: unknown, template: Template): CatalogItem[] {
 class OverloadedError extends Error {}
 
 // ---------------------------------------------------------------------------
+// Playable-game detection.
+// Games are rendered as real, interactive React components (not a design spec),
+// so when the prompt asks for a game we short-circuit to a deterministic game
+// spec and skip the AI branding pass entirely.
+// ---------------------------------------------------------------------------
+
+const GAME_KEYWORDS: Record<GameKind, string[]> = {
+  snake: ['snake', 'ular', 'cacing', 'worm'],
+  tetris: ['tetris', 'blocks', 'balok', 'block puzzle'],
+  dino: ['dino', 'dinosaur', 'dinosaurus', 'runner', 'lari', 'jump game', 't-rex', 'trex'],
+}
+
+const GAME_META: Record<GameKind, { appName: string; industry: string; tagline: string; description: string }> = {
+  snake: {
+    appName: 'Neon Snake',
+    industry: 'Arcade / Snake',
+    tagline: 'Eat, grow, don\u2019t bite yourself',
+    description: 'A classic snake arcade game — steer with arrows or WASD, eat the dots, and grow as long as you can.',
+  },
+  tetris: {
+    appName: 'Block Stack',
+    industry: 'Arcade / Tetris',
+    tagline: 'Stack the blocks, clear the lines',
+    description: 'A falling-block puzzle — rotate and slot tetrominoes to clear full rows and rack up your score.',
+  },
+  dino: {
+    appName: 'Dino Run',
+    industry: 'Arcade / Endless Runner',
+    tagline: 'Jump the cacti, chase the distance',
+    description: 'An endless side-scrolling runner — tap or press space to leap obstacles as the pace keeps climbing.',
+  },
+}
+
+// Return which game the prompt asks for, or null if it isn't a game request.
+function detectGame(prompt: string): GameKind | null {
+  const text = prompt.toLowerCase()
+  for (const [kind, words] of Object.entries(GAME_KEYWORDS) as [GameKind, string[]][]) {
+    if (words.some((w) => text.includes(w))) return kind
+  }
+  // Generic "make a game" with no named game → default to Snake (the arcade
+  // still lets the player switch to Tetris or Dino in-preview).
+  if (/\b(game|games|arcade|permainan|main game|play)\b/.test(text)) return 'snake'
+  return null
+}
+
+function gameSpec(kind: GameKind): DesignSpec {
+  const meta = GAME_META[kind]
+  return {
+    appName: meta.appName,
+    industry: meta.industry,
+    template: 'game',
+    palette: TEMPLATE_PALETTES.game,
+    currency: '',
+    tagline: meta.tagline,
+    description: meta.description,
+    primaryAction: 'Play',
+    categories: [],
+    catalog: [],
+    game: kind,
+    hasContent: true,
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Local, deterministic reasoning fallback.
 // When the AI Gateway is unavailable (no funded card, rate limit, network),
 // we still return a coherent, industry-aware spec by classifying the prompt
@@ -448,6 +513,19 @@ export async function POST(req: Request) {
       { success: false, message: 'Prompt is required' },
       { status: 400 },
     )
+  }
+
+  // Game requests render real, playable arcade components — no AI branding
+  // pass needed, so resolve them deterministically and return immediately.
+  const game = detectGame(userPrompt)
+  if (game) {
+    return Response.json({
+      success: true,
+      company: 'Vibecode Inc.',
+      model: 'vibecode/arcade',
+      engine: 'arcade',
+      spec: gameSpec(game),
+    })
   }
 
   // Prefer real AI reasoning; if the Gateway is unavailable for any reason
