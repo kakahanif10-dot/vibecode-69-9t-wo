@@ -1,0 +1,262 @@
+'use client'
+
+import { useRef, useState } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Monitor, Smartphone, ImagePlus, X, Upload } from 'lucide-react'
+import { PhoneSimulator } from '@/components/workspace/phone-simulator'
+import { AppPreview } from '@/components/workspace/app-preview'
+import { GALLERY_IMAGES } from '@/lib/consultant'
+import type { DesignSpec } from '@/lib/design'
+import { cn } from '@/lib/utils'
+
+type Device = 'mobile' | 'desktop'
+
+/**
+ * Dual-mode preview terminal. A stateless responsive switcher flips the
+ * generated app between a compact phone frame and an expansive desktop console
+ * — both render the exact same client-side <AppPreview/>. A local gallery
+ * picker hydrates a chosen asset into whichever viewport is active.
+ */
+export function ResponsivePreview({
+  spec,
+  building,
+}: {
+  spec: DesignSpec
+  building: boolean
+}) {
+  const [device, setDevice] = useState<Device>('mobile')
+  const [galleryOpen, setGalleryOpen] = useState(false)
+  const [attachment, setAttachment] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const pickFromDevice = (files: FileList | null) => {
+    const file = files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      setAttachment(String(reader.result)) // base64 data URL, memory only
+      setGalleryOpen(false)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  return (
+    <div className="flex h-full flex-col bg-[oklch(0.12_0_0)]">
+      {/* Toolbar */}
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/10 px-4">
+        <div className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 p-0.5">
+          <ViewToggle
+            active={device === 'mobile'}
+            onClick={() => setDevice('mobile')}
+            icon={<Smartphone className="h-3.5 w-3.5" />}
+            label="Mobile"
+          />
+          <ViewToggle
+            active={device === 'desktop'}
+            onClick={() => setDevice('desktop')}
+            icon={<Monitor className="h-3.5 w-3.5" />}
+            label="Desktop"
+          />
+        </div>
+
+        <button
+          onClick={() => setGalleryOpen(true)}
+          disabled={!spec.hasContent}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <ImagePlus className="h-3.5 w-3.5" />
+          Add image from gallery
+        </button>
+      </div>
+
+      {/* Viewport */}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {device === 'mobile' ? (
+          <PhoneSimulator
+            spec={spec}
+            building={building}
+            attachment={attachment}
+            onClearAttachment={() => setAttachment(null)}
+          />
+        ) : (
+          <DesktopFrame
+            spec={spec}
+            building={building}
+            attachment={attachment}
+            onClearAttachment={() => setAttachment(null)}
+          />
+        )}
+
+        {/* Gallery picker modal */}
+        <AnimatePresence>
+          {galleryOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setGalleryOpen(false)}
+              className="absolute inset-0 z-40 flex items-center justify-center bg-black/70 p-6 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ y: 24, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                exit={{ y: 24, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="w-full max-w-lg rounded-2xl border border-white/10 bg-[oklch(0.16_0_0)] p-5 shadow-2xl"
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">Choose from gallery</p>
+                    <p className="text-xs text-white/50">
+                      Realistic asset dataset — decoded locally, nothing is uploaded.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setGalleryOpen(false)}
+                    aria-label="Close gallery"
+                    className="rounded-md p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2.5">
+                  {GALLERY_IMAGES.map((img) => (
+                    <button
+                      key={img.src}
+                      onClick={() => {
+                        setAttachment(img.src)
+                        setGalleryOpen(false)
+                      }}
+                      className="group overflow-hidden rounded-xl border border-white/10 text-left transition-transform hover:scale-[1.02]"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={img.src || '/placeholder.svg'}
+                        alt={img.label}
+                        className="h-20 w-full object-cover"
+                      />
+                      <span className="block truncate px-2 py-1.5 text-[10px] font-medium text-white/70">
+                        {img.label}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+
+                <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 py-2.5 text-xs font-semibold text-white/80 transition-colors hover:bg-white/10">
+                  <Upload className="h-4 w-4" /> Upload from device
+                  <input
+                    ref={fileRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => pickFromDevice(e.target.files)}
+                  />
+                </label>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Desktop console frame — same AppPreview, expansive browser chrome    */
+/* ------------------------------------------------------------------ */
+
+function DesktopFrame({
+  spec,
+  building,
+  attachment,
+  onClearAttachment,
+}: {
+  spec: DesignSpec
+  building: boolean
+  attachment?: string | null
+  onClearAttachment?: () => void
+}) {
+  return (
+    <div className="flex h-full items-center justify-center p-6">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+        className="flex h-full max-h-[640px] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-white/12 bg-black shadow-[0_40px_80px_-20px_rgba(0,0,0,0.9)]"
+      >
+        {/* Browser chrome */}
+        <div className="flex h-9 shrink-0 items-center gap-2 border-b border-white/10 bg-white/[0.03] px-3">
+          <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
+          <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+          <div className="ml-3 flex-1 truncate rounded-md bg-white/5 px-3 py-1 text-[11px] text-white/40">
+            {spec.hasContent ? `${slug(spec.appName)}.vibecode.app` : 'preview.vibecode.app'}
+          </div>
+        </div>
+
+        {/* App canvas */}
+        <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
+          {attachment && (
+            <div className="relative z-[5] shrink-0">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={attachment || '/placeholder.svg'}
+                alt="Attached gallery asset"
+                className="h-36 w-full object-cover"
+              />
+              <button
+                onClick={onClearAttachment}
+                className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/65 px-2.5 py-1 text-[10px] font-semibold text-white backdrop-blur"
+              >
+                <X className="h-3 w-3" /> Clear Attachment
+              </button>
+            </div>
+          )}
+          {building && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-black/55 backdrop-blur-sm"
+            >
+              <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+              <p className="text-xs text-white/70">Compiling your app…</p>
+            </motion.div>
+          )}
+          <div className="mx-auto flex min-h-0 w-full max-w-md flex-1 flex-col overflow-hidden">
+            <AppPreview spec={spec} />
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function slug(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'app'
+}
+
+function ViewToggle({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors',
+        active ? 'bg-white/15 text-white' : 'text-white/50 hover:text-white',
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}

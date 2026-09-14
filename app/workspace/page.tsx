@@ -1,16 +1,22 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
-import { AnimatePresence } from 'framer-motion'
-import { PhoneSimulator } from '@/components/workspace/phone-simulator'
-import { PromptMenu } from '@/components/workspace/prompt-menu'
-import { ApkLoadingOverlay } from '@/components/workspace/apk-loading-overlay'
+import { ConsultantPanel } from '@/components/workspace/consultant-panel'
+import { ResponsivePreview } from '@/components/workspace/responsive-preview'
 import {
   WorkspaceSidebar,
   type SidebarTab,
 } from '@/components/workspace/workspace-sidebar'
 import { VibecodeLogo } from '@/components/vibecode-logo'
 import { DEFAULT_SPEC, type DesignSpec } from '@/lib/design'
+import {
+  COMPILE_DURATION_MS,
+  downloadSourceZip,
+  introMessage,
+  recommendationsFor,
+  type ConsultantMessage,
+  type Recommendation,
+} from '@/lib/consultant'
 
 type Session = {
   id: string
@@ -49,9 +55,18 @@ function relativeTime(ts: number): string {
   return `${Math.round(hr / 24)}d ago`
 }
 
+const uid = () =>
+  typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2)
+
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 export default function WorkspacePage() {
   const [prompt, setPrompt] = useState('')
+  const [lastPrompt, setLastPrompt] = useState('')
   const [spec, setSpec] = useState<DesignSpec>(DEFAULT_SPEC)
+  const [messages, setMessages] = useState<ConsultantMessage[]>([])
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -75,61 +90,91 @@ export default function WorkspacePage() {
     }
   }
 
-  // Live, frontend-only edits to the design spec (also mirrored into the active session).
-  const patchSpec = (patch: Partial<DesignSpec>) =>
-    setSpec((s) => {
-      const next = { ...s, ...patch }
-      if (activeId) {
-        setSessions((list) => {
-          const updated = list.map((se) =>
-            se.id === activeId ? { ...se, spec: next, updated: Date.now() } : se,
-          )
-          try {
-            localStorage.setItem(STORE_KEY, encode(updated))
-          } catch {
-            /* ignore */
-          }
-          return updated
-        })
-      }
-      return next
-    })
-
-  const handleGenerate = async () => {
-    const userPrompt = prompt.trim()
-    if (!userPrompt || generating) return
+  // Core generation routine, shared by the composer and the recommendation chips.
+  const runGenerate = async (fullPrompt: string, userLabel: string) => {
+    if (generating) return
     setGenerating(true)
     setError(null)
+    setMessages((m) => [...m, { id: uid(), role: 'user', text: userLabel }])
 
     try {
-      const res = await fetch('/api/generate', {
+      const fetchPromise = fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userPrompt }),
-      })
-      const data = await res.json()
-      if (!res.ok || !data.success) {
+        body: JSON.stringify({ userPrompt: fullPrompt }),
+      }).then(async (res) => ({ ok: res.ok, data: await res.json() }))
+
+      // Hold the reveal until the compile log has fully streamed (~3.6s).
+      const [{ ok, data }] = await Promise.all([fetchPromise, delay(COMPILE_DURATION_MS)])
+
+      if (!ok || !data.success) {
         throw new Error(data?.error || data?.message || 'Generation failed')
       }
+
       const newSpec = data.spec as DesignSpec
       setSpec(newSpec)
+      setLastPrompt(fullPrompt)
 
-      const id = crypto.randomUUID()
-      const session: Session = {
-        id,
-        title: newSpec.appName || userPrompt.slice(0, 24),
-        prompt: userPrompt,
-        spec: newSpec,
-        updated: Date.now(),
+      setMessages((m) => [
+        ...m,
+        {
+          id: uid(),
+          role: 'assistant',
+          text: introMessage(newSpec),
+          recommendations: recommendationsFor(newSpec),
+        },
+      ])
+
+      // Persist / update the session.
+      const title = newSpec.appName || userLabel.slice(0, 24)
+      if (activeId) {
+        persist(
+          sessions.map((se) =>
+            se.id === activeId
+              ? { ...se, title, prompt: fullPrompt, spec: newSpec, updated: Date.now() }
+              : se,
+          ),
+        )
+      } else {
+        const id = uid()
+        persist(
+          [
+            { id, title, prompt: fullPrompt, spec: newSpec, updated: Date.now() },
+            ...sessions,
+          ].slice(0, 30),
+        )
+        setActiveId(id)
       }
-      persist([session, ...sessions].slice(0, 30))
-      setActiveId(id)
       setTab('chats')
     } catch (err) {
+      setMessages((m) => [
+        ...m,
+        {
+          id: uid(),
+          role: 'assistant',
+          text: `I hit a snag compiling that: ${(err as Error).message}. Try rephrasing the prompt or generate again.`,
+        },
+      ])
       setError((err as Error).message)
     } finally {
       setGenerating(false)
     }
+  }
+
+  const handleGenerate = () => {
+    const userPrompt = prompt.trim()
+    if (!userPrompt) return
+    setPrompt('')
+    void runGenerate(userPrompt, userPrompt)
+  }
+
+  const handleRecommendation = (rec: Recommendation) => {
+    const base = lastPrompt || spec.industry || 'the current app'
+    void runGenerate(`${base}. Also ${rec.append}.`, `Please add: ${rec.label}`)
+  }
+
+  const handleExport = () => {
+    if (spec.hasContent) downloadSourceZip(spec)
   }
 
   const selectSession = (id: string) => {
@@ -137,8 +182,18 @@ export default function WorkspacePage() {
     if (!s) return
     setActiveId(id)
     setSpec(s.spec)
-    setPrompt(s.prompt)
+    setPrompt('')
+    setLastPrompt(s.prompt)
     setError(null)
+    // Restore a lightweight conversation recap for the loaded project.
+    setMessages([
+      {
+        id: uid(),
+        role: 'assistant',
+        text: introMessage(s.spec),
+        recommendations: recommendationsFor(s.spec),
+      },
+    ])
   }
 
   const deleteSession = (id: string) => {
@@ -148,6 +203,8 @@ export default function WorkspacePage() {
       setActiveId(null)
       setSpec(DEFAULT_SPEC)
       setPrompt('')
+      setLastPrompt('')
+      setMessages([])
     }
   }
 
@@ -155,6 +212,8 @@ export default function WorkspacePage() {
     setActiveId(null)
     setSpec(DEFAULT_SPEC)
     setPrompt('')
+    setLastPrompt('')
+    setMessages([])
     setError(null)
   }
 
@@ -198,23 +257,24 @@ export default function WorkspacePage() {
           </div>
         </header>
 
-        {/* Two-panel layout */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(340px,440px)_1fr]">
-          <div className="relative min-h-0 border-b border-border lg:border-b-0 lg:border-r">
-            <PromptMenu
+        {/* Consultant + preview */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(360px,460px)_1fr]">
+          <div className="min-h-0 border-b border-border lg:border-b-0 lg:border-r">
+            <ConsultantPanel
               prompt={prompt}
               onPromptChange={setPrompt}
-              spec={spec}
-              onPatch={patchSpec}
               onGenerate={handleGenerate}
+              onRecommendation={handleRecommendation}
+              onExport={handleExport}
               generating={generating}
               error={error}
+              messages={messages}
+              spec={spec}
             />
-            <AnimatePresence>{generating && <ApkLoadingOverlay />}</AnimatePresence>
           </div>
 
-          <div className="hidden min-h-0 bg-[oklch(0.12_0_0)] lg:block">
-            <PhoneSimulator spec={spec} building={generating} />
+          <div className="hidden min-h-0 lg:block">
+            <ResponsivePreview spec={spec} building={generating} />
           </div>
         </div>
       </div>

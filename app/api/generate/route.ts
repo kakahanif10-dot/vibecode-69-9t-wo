@@ -5,7 +5,6 @@
 // The reasoning core runs on the AI SDK with Google Gemini.
 
 import { generateText } from 'ai'
-import { google } from '@ai-sdk/google'
 import {
   TEMPLATE_PALETTES,
   TEMPLATES,
@@ -17,12 +16,12 @@ import {
 
 export const maxDuration = 60
 
-// Reasoning core runs on the AI SDK with Google Gemini, authenticated via the
-// GOOGLE_GENERATIVE_AI_API_KEY environment variable (read automatically by the
-// @ai-sdk/google provider).
-const MODEL = 'gemini-3.5-flash'
+// Reasoning core runs on the AI SDK through the Vercel AI Gateway, which is
+// zero-config in v0 previews and Vercel deployments (no provider API key). We
+// pass plain "provider/model" Gateway IDs straight to generateText.
+const MODEL = 'google/gemini-3-flash'
 // Ordered fallbacks tried when the primary model is overloaded or rate-limited.
-const MODEL_FALLBACKS = ['gemini-3.5-flash', 'gemini-2.5-flash'] as const
+const MODEL_FALLBACKS = ['google/gemini-3-flash', 'google/gemini-2.5-flash'] as const
 
 const SYSTEM_INSTRUCTION = `You are the Universal Context-Aware UI/UX Engine for Vibecode Inc., reasoning like a senior product designer with 10 years of experience.
 The user describes ANY software product in ANY language (SAMSAT / government tax portal, a coffee shop, a restaurant, an online store, a clinic, a SaaS tool, etc.).

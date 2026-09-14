@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { Wifi, Signal, BatteryFull } from 'lucide-react'
+import { Wifi, Signal, BatteryFull, X } from 'lucide-react'
 import { AppPreview } from '@/components/workspace/app-preview'
 import type { DesignSpec } from '@/lib/design'
 
@@ -13,9 +13,13 @@ import type { DesignSpec } from '@/lib/design'
 export function PhoneSimulator({
   spec,
   building,
+  attachment,
+  onClearAttachment,
 }: {
   spec: DesignSpec
   building: boolean
+  attachment?: string | null
+  onClearAttachment?: () => void
 }) {
   const now = new Date().toLocaleTimeString([], {
     hour: '2-digit',
@@ -52,6 +56,22 @@ export function PhoneSimulator({
 
           {/* App canvas */}
           <div className="relative flex flex-1 flex-col overflow-hidden pt-7">
+            {attachment && (
+              <div className="relative z-[5] shrink-0">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={attachment || '/placeholder.svg'}
+                  alt="Attached gallery asset"
+                  className="h-24 w-full object-cover"
+                />
+                <button
+                  onClick={onClearAttachment}
+                  className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-[9px] font-semibold text-white backdrop-blur"
+                >
+                  <X className="h-3 w-3" /> Clear Attachment
+                </button>
+              </div>
+            )}
             {building && (
               <motion.div
                 initial={{ opacity: 0 }}
