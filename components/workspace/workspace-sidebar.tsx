@@ -11,12 +11,16 @@ import {
   Trash2,
   Settings,
   LifeBuoy,
-  FolderGit2,
   Folder,
-  Users,
+  FolderOpen,
+  FileCode2,
+  FileType2,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react'
 import { VibecodeMark } from '@/components/vibecode-logo'
 import { cn } from '@/lib/utils'
+import type { DesignSpec, Template } from '@/lib/design'
 
 export type Session = {
   id: string
@@ -24,13 +28,59 @@ export type Session = {
   updated: string
 }
 
-export type SidebarTab = 'chats' | 'projects'
+export type SidebarTab = 'chats' | 'files'
 
-const TEAM_PROJECTS = [
-  { name: 'Public Sector Suite', status: '4 apps · shared', icon: FolderGit2 },
-  { name: 'Retail & Commerce', status: '2 apps · shared', icon: Folder },
-  { name: 'Hospitality', status: '1 app · draft', icon: Users },
-]
+/* ------------------------------------------------------------------ */
+/* Code-tree: the compiled output of the active generation, mapped to  */
+/* a file structure. No hardcoded personas — everything is derived     */
+/* from the detected industry template so the tree reflects real code. */
+/* ------------------------------------------------------------------ */
+
+type TreeNode = { name: string; kind: 'folder' | 'tsx' | 'css'; children?: TreeNode[] }
+
+// Industry template → the screen modules the engine compiles for it.
+const SCREEN_MODULES: Record<Template, string[]> = {
+  government: ['login-screen.tsx', 'tax-dashboard.tsx', 'document-upload.tsx', 'account.tsx'],
+  fintech: ['wallet-overview.tsx', 'transactions.tsx', 'transfer-sheet.tsx', 'account.tsx'],
+  edutech: ['course-catalog.tsx', 'lesson-player.tsx', 'progress.tsx', 'profile.tsx'],
+  food: ['menu-grid.tsx', 'cart-drawer.tsx', 'order-tracking.tsx', 'profile.tsx'],
+  ecommerce: ['storefront.tsx', 'search.tsx', 'cart-drawer.tsx', 'profile.tsx'],
+  health: ['services.tsx', 'find-provider.tsx', 'booking.tsx', 'profile.tsx'],
+  saas: ['plans.tsx', 'modules.tsx', 'usage.tsx', 'account.tsx'],
+  generic: ['home.tsx', 'explore.tsx', 'profile.tsx'],
+}
+
+function buildProjectTree(spec: DesignSpec): TreeNode[] {
+  const screens = SCREEN_MODULES[spec.template] ?? SCREEN_MODULES.generic
+  return [
+    {
+      name: 'app',
+      kind: 'folder',
+      children: [
+        { name: 'layout.tsx', kind: 'tsx' },
+        { name: 'page.tsx', kind: 'tsx' },
+        { name: 'globals.css', kind: 'css' },
+      ],
+    },
+    {
+      name: 'components',
+      kind: 'folder',
+      children: [
+        { name: 'app-shell.tsx', kind: 'tsx' },
+        { name: 'bottom-nav.tsx', kind: 'tsx' },
+        ...screens.map((name) => ({ name, kind: 'tsx' as const })),
+      ],
+    },
+    {
+      name: 'lib',
+      kind: 'folder',
+      children: [
+        { name: 'design-tokens.ts', kind: 'tsx' },
+        { name: 'catalog.ts', kind: 'tsx' },
+      ],
+    },
+  ]
+}
 
 export function WorkspaceSidebar({
   collapsed,
@@ -42,6 +92,7 @@ export function WorkspaceSidebar({
   onSelect,
   onNew,
   onDelete,
+  spec,
 }: {
   collapsed: boolean
   onToggle: () => void
@@ -52,6 +103,7 @@ export function WorkspaceSidebar({
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
+  spec: DesignSpec
 }) {
   const [query, setQuery] = useState('')
   const filtered = sessions.filter((s) =>
@@ -113,7 +165,7 @@ export function WorkspaceSidebar({
           {/* Tabs */}
           <div className="mt-3 px-3">
             <div className="flex gap-1 rounded-lg border border-sidebar-border bg-background/40 p-0.5">
-              {(['chats', 'projects'] as const).map((t) => (
+              {(['chats', 'files'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => onTabChange(t)}
@@ -206,36 +258,7 @@ export function WorkspaceSidebar({
             )}
           </>
         ) : (
-          <>
-            {!collapsed && (
-              <p className="px-1 pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Team folders
-              </p>
-            )}
-            <ul className="flex flex-col gap-1">
-              {TEAM_PROJECTS.map((proj) => (
-                <li key={proj.name}>
-                  <button
-                    title={proj.name}
-                    className={cn(
-                      'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground',
-                      collapsed && 'justify-center px-0',
-                    )}
-                  >
-                    <proj.icon className="h-4 w-4 shrink-0 text-primary" />
-                    {!collapsed && (
-                      <span className="flex-1 overflow-hidden">
-                        <span className="block truncate">{proj.name}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {proj.status}
-                        </span>
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
+          !collapsed && <FileTree spec={spec} />
         )}
       </div>
 
@@ -261,5 +284,99 @@ export function WorkspaceSidebar({
         </ul>
       </div>
     </motion.aside>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Live code tree of the active generation                             */
+/* ------------------------------------------------------------------ */
+
+function FileTree({ spec }: { spec: DesignSpec }) {
+  if (!spec.hasContent) {
+    return (
+      <div className="px-1">
+        <p className="pb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Source tree
+        </p>
+        <p className="py-4 text-xs text-muted-foreground">
+          Generate an app to map its compiled file structure.
+        </p>
+      </div>
+    )
+  }
+
+  const tree = buildProjectTree(spec)
+  return (
+    <div className="px-1">
+      <div className="flex items-center justify-between pb-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Source tree
+        </p>
+        <span className="truncate rounded-full border border-sidebar-border bg-background/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+          {spec.template}
+        </span>
+      </div>
+      <ul className="flex flex-col gap-0.5 font-mono text-[13px]">
+        {tree.map((node) => (
+          <TreeItem key={node.name} node={node} depth={0} />
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function TreeItem({ node, depth }: { node: TreeNode; depth: number }) {
+  const [open, setOpen] = useState(true)
+  const pad = { paddingLeft: depth * 12 + 4 }
+
+  if (node.kind === 'folder') {
+    const Chevron = open ? ChevronDown : ChevronRight
+    const FolderIcon = open ? FolderOpen : Folder
+    return (
+      <li>
+        <button
+          onClick={() => setOpen((o) => !o)}
+          style={pad}
+          className="flex w-full items-center gap-1.5 rounded-md py-1 pr-2 text-left text-muted-foreground transition-colors hover:bg-sidebar-accent/60 hover:text-foreground"
+        >
+          <Chevron className="h-3 w-3 shrink-0" />
+          <FolderIcon className="h-3.5 w-3.5 shrink-0 text-primary" />
+          <span className="truncate">{node.name}</span>
+        </button>
+        <AnimatePresence initial={false}>
+          {open && node.children && (
+            <motion.ul
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              {node.children.map((child) => (
+                <TreeItem key={child.name} node={child} depth={depth + 1} />
+              ))}
+            </motion.ul>
+          )}
+        </AnimatePresence>
+      </li>
+    )
+  }
+
+  const FileIcon = node.kind === 'css' ? FileType2 : FileCode2
+  return (
+    <li>
+      <div
+        style={pad}
+        className="flex items-center gap-1.5 rounded-md py-1 pr-2 text-muted-foreground"
+      >
+        <span className="h-3 w-3 shrink-0" />
+        <FileIcon
+          className={cn(
+            'h-3.5 w-3.5 shrink-0',
+            node.kind === 'css' ? 'text-sky-400' : 'text-emerald-400',
+          )}
+        />
+        <span className="truncate">{node.name}</span>
+      </div>
+    </li>
   )
 }
