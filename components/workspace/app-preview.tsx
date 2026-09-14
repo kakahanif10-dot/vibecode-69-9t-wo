@@ -42,6 +42,7 @@ import {
   GraduationCap,
 } from 'lucide-react'
 import type { CatalogItem, DesignSpec, Palette, Template } from '@/lib/design'
+import { GameArcade } from '@/components/workspace/games'
 import { cn } from '@/lib/utils'
 
 /* ------------------------------------------------------------------ */
@@ -254,6 +255,8 @@ export function AppPreview({
   onEdit?: SpecEditor
 }) {
   if (!spec.hasContent) return <AwaitingState />
+  // Game template boots a real, playable arcade instead of the app shell.
+  if (spec.template === 'game') return <GameArcade spec={spec} />
   return (
     <EditContext.Provider value={onEdit ?? null}>
       <InteractiveApp spec={spec} />

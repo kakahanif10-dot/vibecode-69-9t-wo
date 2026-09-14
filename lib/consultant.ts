@@ -76,6 +76,11 @@ const RECOMMENDATIONS: Record<Template, Recommendation[]> = {
     { label: 'Team roles & permissions matrix', append: 'add team roles and permission management' },
     { label: 'Live analytics & usage dashboard', append: 'add a live analytics and usage dashboard' },
   ],
+  game: [
+    { label: 'Play Snake', append: 'make a snake game' },
+    { label: 'Play Tetris', append: 'make a tetris game' },
+    { label: 'Play Dino Run', append: 'make a dino runner game' },
+  ],
   generic: [
     { label: 'Stateful onboarding flow controller', append: 'add a stateful multi-step onboarding flow' },
     { label: 'Notifications & activity feed matrix', append: 'add a notifications and activity feed' },
@@ -93,6 +98,14 @@ export function introMessage(spec: DesignSpec): string {
   const recs = recommendationsFor(spec)
   const label = (spec.industry || TEMPLATE_LABELS[spec.template]).toLowerCase()
   const name = spec.appName ? `“${spec.appName}”` : `your ${label} app`
+  // Games are actually playable in the preview, not editable text mockups.
+  if (spec.template === 'game') {
+    return (
+      `${name} is live and fully playable right in the preview — hit Play and use the arrow keys, WASD, or the on-screen buttons (tap works too). ` +
+      `There are three games in the cabinet: Snake, Tetris, and Dino Run — switch between them with the tabs up top. ` +
+      `Want a different game or a tweak? Just tell me.`
+    )
+  }
   return (
     `Alright, ${name} is live in the preview — go ahead and click around, it's fully interactive. ` +
     `Oh, and every piece of text is editable: just click any label, price, or button in the preview to rename it on the spot. ` +
