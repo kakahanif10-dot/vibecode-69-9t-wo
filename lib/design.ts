@@ -3,7 +3,13 @@
 // industry from the prompt, picks a functional multi-page `template`, and
 // emits a matching hex `palette` + an industry-specific `catalog`.
 
-export type Template = 'government' | 'food' | 'ecommerce' | 'generic'
+export type Template =
+  | 'government'
+  | 'food'
+  | 'ecommerce'
+  | 'health'
+  | 'saas'
+  | 'generic'
 
 export type Palette = {
   bg: string
@@ -70,6 +76,26 @@ export const TEMPLATE_PALETTES: Record<Template, Palette> = {
     accent: '#ff5a1f',
     accentText: '#ffffff',
   },
+  // Clinical trust: deep teal, clean surfaces, healing teal-green accent.
+  health: {
+    bg: '#06171a',
+    surface: '#0f2b2e',
+    border: 'rgba(94,234,212,0.18)',
+    text: '#e6fbf7',
+    muted: '#8fb9b4',
+    accent: '#14b8a6',
+    accentText: '#03130f',
+  },
+  // Modern software: sleek near-black, violet product accent.
+  saas: {
+    bg: '#0b0b16',
+    surface: '#16162a',
+    border: 'rgba(139,124,246,0.18)',
+    text: '#f2f1fb',
+    muted: '#a5a3c4',
+    accent: '#8b5cf6',
+    accentText: '#ffffff',
+  },
   // Neutral fallback for anything else.
   generic: {
     bg: '#0a0a0a',
@@ -86,6 +112,8 @@ export const TEMPLATES: readonly Template[] = [
   'government',
   'food',
   'ecommerce',
+  'health',
+  'saas',
   'generic',
 ] as const
 
@@ -93,6 +121,8 @@ export const TEMPLATE_LABELS: Record<Template, string> = {
   government: 'Government / Public Service',
   food: 'Food & Beverage',
   ecommerce: 'E-Commerce / Marketplace',
+  health: 'Health / Medical',
+  saas: 'SaaS / Productivity',
   generic: 'Universal App',
 }
 

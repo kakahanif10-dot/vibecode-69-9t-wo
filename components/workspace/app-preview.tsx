@@ -26,8 +26,52 @@ import {
   Lock,
   LogOut,
   Star,
+  Landmark,
+  Coffee,
+  HeartPulse,
+  Zap,
+  Sparkles,
 } from 'lucide-react'
-import type { CatalogItem, DesignSpec, Palette } from '@/lib/design'
+import type { CatalogItem, DesignSpec, Palette, Template } from '@/lib/design'
+
+/* ------------------------------------------------------------------ */
+/* Automatic psychological brand emblem per detected industry          */
+/* ------------------------------------------------------------------ */
+
+// The Context-Aware Engine assigns each industry an authoritative logo mark,
+// so a generated app reads as a real institution/brand — never a bare initial.
+const BRAND_ICON: Record<Template, typeof Home> = {
+  government: Landmark,
+  food: Coffee,
+  ecommerce: ShoppingBag,
+  health: HeartPulse,
+  saas: Zap,
+  generic: Sparkles,
+}
+
+function BrandMark({
+  spec,
+  className = 'h-7 w-7',
+  iconClassName = 'h-4 w-4',
+  rounded = 'rounded-lg',
+}: {
+  spec: DesignSpec
+  className?: string
+  iconClassName?: string
+  rounded?: string
+}) {
+  const p = spec.palette
+  const Icon = BRAND_ICON[spec.template] ?? Sparkles
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center ${rounded} ${className}`}
+      style={{ backgroundColor: p.accent, color: p.accentText }}
+      aria-hidden="true"
+    >
+      <Icon className={iconClassName} strokeWidth={2.4} />
+    </span>
+  )
+}
 
 /**
  * Fully client-side render of the generated product. The whole thing runs in
@@ -79,6 +123,19 @@ function pagesFor(template: DesignSpec['template']): PageDef[] {
         { key: 'search', label: 'Search', icon: Search },
         { key: 'cart', label: 'Cart', icon: ShoppingBag },
         { key: 'profile', label: 'Me', icon: User },
+      ]
+    case 'health':
+      return [
+        { key: 'home', label: 'Services', icon: HeartPulse },
+        { key: 'search', label: 'Find', icon: Search },
+        { key: 'cart', label: 'Booking', icon: ShoppingBag },
+        { key: 'profile', label: 'Me', icon: User },
+      ]
+    case 'saas':
+      return [
+        { key: 'home', label: 'Plans', icon: LayoutGrid },
+        { key: 'explore', label: 'Modules', icon: Search },
+        { key: 'profile', label: 'Account', icon: User },
       ]
     default:
       return [
@@ -204,19 +261,17 @@ function AppHeader({
   onCart: () => void
 }) {
   const p = spec.palette
-  const showCart = spec.template === 'food' || spec.template === 'ecommerce'
+  const showCart =
+    spec.template === 'food' ||
+    spec.template === 'ecommerce' ||
+    spec.template === 'health'
   return (
     <div
       className="flex items-center justify-between px-4 py-3"
       style={{ borderBottom: `1px solid ${p.border}` }}
     >
       <div className="flex items-center gap-2 overflow-hidden">
-        <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[13px] font-black"
-          style={{ backgroundColor: p.accent, color: p.accentText }}
-        >
-          {spec.appName.charAt(0).toUpperCase()}
-        </span>
+        <BrandMark spec={spec} />
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold leading-tight">
             {spec.appName}
@@ -612,12 +667,12 @@ function LoginScreen({ spec, onLogin }: { spec: DesignSpec; onLogin: () => void 
       style={{ backgroundColor: p.bg, color: p.text }}
     >
       <div className="flex flex-col items-center gap-2">
-        <span
-          className="flex h-14 w-14 items-center justify-center rounded-2xl"
-          style={{ backgroundColor: p.accent, color: p.accentText }}
-        >
-          <ShieldCheck className="h-7 w-7" />
-        </span>
+        <BrandMark
+          spec={spec}
+          className="h-14 w-14"
+          iconClassName="h-7 w-7"
+          rounded="rounded-2xl"
+        />
         <p className="text-center text-[15px] font-bold leading-tight">{spec.appName}</p>
         <p className="text-center text-[10px]" style={{ color: p.muted }}>
           {spec.industry} · Secure portal
@@ -1094,33 +1149,58 @@ function ProfilePage({
   cartCount: number
 }) {
   const p = spec.palette
-  const stats =
-    spec.template === 'government'
-      ? [
-          { label: 'Vehicles', value: '2' },
-          { label: 'Paid', value: '14' },
-          { label: 'Due', value: '1' },
-        ]
-      : [
-          { label: 'Orders', value: '27' },
-          { label: 'In cart', value: String(cartCount) },
-          { label: 'Points', value: '860' },
-        ]
-
-  const rows =
-    spec.template === 'government'
-      ? ['Personal data', 'My vehicles', 'Payment history', 'Notifications']
-      : ['Order history', 'Addresses', 'Payment methods', 'Notifications']
+  const STAT_SETS: Record<Template, { label: string; value: string }[]> = {
+    government: [
+      { label: 'Vehicles', value: '2' },
+      { label: 'Paid', value: '14' },
+      { label: 'Due', value: '1' },
+    ],
+    health: [
+      { label: 'Visits', value: '9' },
+      { label: 'Booked', value: String(cartCount) },
+      { label: 'Reports', value: '5' },
+    ],
+    saas: [
+      { label: 'Projects', value: '12' },
+      { label: 'Members', value: '4' },
+      { label: 'Usage', value: '68%' },
+    ],
+    food: [
+      { label: 'Orders', value: '27' },
+      { label: 'In cart', value: String(cartCount) },
+      { label: 'Points', value: '860' },
+    ],
+    ecommerce: [
+      { label: 'Orders', value: '27' },
+      { label: 'In cart', value: String(cartCount) },
+      { label: 'Points', value: '860' },
+    ],
+    generic: [
+      { label: 'Orders', value: '27' },
+      { label: 'In cart', value: String(cartCount) },
+      { label: 'Points', value: '860' },
+    ],
+  }
+  const ROW_SETS: Record<Template, string[]> = {
+    government: ['Personal data', 'My vehicles', 'Payment history', 'Notifications'],
+    health: ['Personal data', 'Medical records', 'Appointments', 'Notifications'],
+    saas: ['Workspace settings', 'Team & roles', 'Billing & plan', 'Notifications'],
+    food: ['Order history', 'Addresses', 'Payment methods', 'Notifications'],
+    ecommerce: ['Order history', 'Addresses', 'Payment methods', 'Notifications'],
+    generic: ['Order history', 'Addresses', 'Payment methods', 'Notifications'],
+  }
+  const stats = STAT_SETS[spec.template] ?? STAT_SETS.generic
+  const rows = ROW_SETS[spec.template] ?? ROW_SETS.generic
 
   return (
     <div className="space-y-3 px-4 py-3">
       <div className="flex items-center gap-3">
-        <span
-          className="flex h-14 w-14 items-center justify-center rounded-full text-lg font-black"
-          style={{ backgroundColor: p.accent, color: p.accentText }}
-        >
-          {spec.appName.charAt(0).toUpperCase()}
-        </span>
+        <BrandMark
+          spec={spec}
+          className="h-14 w-14"
+          iconClassName="h-6 w-6"
+          rounded="rounded-full"
+        />
         <div>
           <p className="text-[13px] font-bold">Demo User</p>
           <p className="text-[10px]" style={{ color: p.muted }}>

@@ -31,7 +31,7 @@ Return ONLY a single minified JSON object (no markdown, no prose, no code fences
 {
   "appName": string,        // short official-sounding product/brand name, max 22 chars
   "industry": string,       // human label of the detected industry, max 28 chars (e.g. "Government / Vehicle Tax")
-  "template": "government" | "food" | "ecommerce" | "generic",
+  "template": "government" | "food" | "ecommerce" | "health" | "saas" | "generic",
   "currency": string,       // currency symbol that fits the locale of the idea ("Rp", "$", "€"...), max 3 chars
   "tagline": string,        // punchy hero headline, max 48 chars
   "description": string,    // one friendly sentence describing the product
@@ -49,6 +49,8 @@ TEMPLATE RULES (pick the best fit):
 - "government": public services, tax (SAMSAT), permits, ID/licensing. Use authoritative institutional colors — navy blue background, steel greys, an ORANGE warning accent for anything payment/tax related. Catalog rows = payable services (name = service, price = amount due, meta = due date or status). Categories = service groups.
 - "food": coffee shops, cafes, restaurants, delivery. Use warm EARTH TONES — espresso browns, cream, forest green accent. Catalog rows = menu items (name, price, meta = short description). Categories = menu sections (Coffee, Pastries...).
 - "ecommerce": online stores, marketplaces, retail. Use bright high-conversion colors (vivid orange/red accent like Shopee/Amazon). Catalog rows = products (name, price, meta = brand or short label). Categories = product categories.
+- "health": clinics, hospitals, pharmacies, telemedicine, wellness. Use CLEAN CLINICAL colors — deep teal background, soft surfaces, a trustworthy teal/green accent (never alarming red). Catalog rows = services/appointments/medicines (name, price = consult/med fee or 0, meta = doctor, duration or dosage). Categories = specialties (Dentist, Cardiology, Pharmacy...).
+- "saas": software tools, dashboards, productivity, B2B platforms. Use MODERN SLEEK colors — near-black background with a confident violet/indigo accent. Catalog rows = plans or feature modules (name, price = plan price or 0, meta = short benefit). Categories = feature areas or plan tiers.
 - "generic": anything else. Clean neutral palette with a confident accent. Catalog rows = key features/screens (price 0, meta = short benefit). Categories = sections.
 
 Choose colors that genuinely match the brand psychology of the detected industry. Keep every string concise so it renders inside a phone preview.`
@@ -113,6 +115,8 @@ function toCategories(value: unknown, template: Template): string[] {
     government: ['Tax', 'Permits', 'Licenses', 'Fines'],
     food: ['Coffee', 'Pastries', 'Tea', 'Specials'],
     ecommerce: ['Popular', 'New', 'Deals', 'Top rated'],
+    health: ['General', 'Dentist', 'Cardiology', 'Pharmacy'],
+    saas: ['Starter', 'Pro', 'Team', 'Enterprise'],
     generic: ['Overview', 'Explore', 'Popular', 'Recent'],
   }
   if (!Array.isArray(value)) return fallback[template]
@@ -142,6 +146,18 @@ function toCatalog(value: unknown, template: Template): CatalogItem[] {
       { name: 'Smart Watch', price: 129, meta: 'New' },
       { name: 'Canvas Backpack', price: 42, meta: 'Deal' },
       { name: 'Desk Lamp', price: 28, meta: 'Top rated' },
+    ],
+    health: [
+      { name: 'General Consultation', price: 150000, meta: 'Dr. Sari · 20 min' },
+      { name: 'Dental Cleaning', price: 300000, meta: 'Dr. Rian · 30 min' },
+      { name: 'Blood Test Panel', price: 220000, meta: 'Lab · fasting' },
+      { name: 'Paracetamol 500mg', price: 25000, meta: '10 tablets' },
+    ],
+    saas: [
+      { name: 'Starter', price: 0, meta: 'Up to 3 projects' },
+      { name: 'Pro', price: 19, meta: 'Unlimited projects' },
+      { name: 'Team', price: 49, meta: 'Roles & SSO' },
+      { name: 'Analytics Module', price: 0, meta: 'Real-time insights' },
     ],
     generic: [
       { name: 'Dashboard', price: 0, meta: 'Live overview' },
