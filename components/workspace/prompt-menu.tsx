@@ -201,8 +201,12 @@ export function PromptMenu({
 
         <button
           onClick={handleInstall}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold tracking-wide text-foreground transition-colors hover:bg-secondary"
+          className="group relative inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-white/60 bg-white px-4 py-2.5 text-sm font-semibold tracking-wide text-black shadow-[0_0_18px_-2px_rgba(255,255,255,0.7)] transition-all hover:shadow-[0_0_30px_0px_rgba(255,255,255,0.95)]"
         >
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 animate-pulse rounded-xl bg-white/30"
+          />
           {status === 'installed' ? (
             <>
               <Check className="h-4 w-4" /> INSTALLED AS APP
