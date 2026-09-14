@@ -164,10 +164,14 @@ export function ConsultantPanel({
         <button
           onClick={onExport}
           disabled={!spec.hasContent || generating}
-          className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold tracking-wide text-foreground transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+          className="group relative mt-2 inline-flex w-full items-center justify-center gap-2 overflow-hidden rounded-xl border border-cyan-400/50 bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2.5 text-sm font-semibold tracking-wide text-white shadow-[0_0_18px_-2px_rgba(34,211,238,0.65)] transition-all hover:shadow-[0_0_28px_0px_rgba(34,211,238,0.85)] disabled:cursor-not-allowed disabled:border-border disabled:from-transparent disabled:to-transparent disabled:text-foreground disabled:shadow-none disabled:opacity-40"
         >
-          <Download className="h-4 w-4" />
-          DOWNLOAD SOURCE (.zip)
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 animate-pulse rounded-xl bg-cyan-300/20 group-disabled:hidden"
+          />
+          <Download className="relative h-4 w-4" />
+          <span className="relative">DOWNLOAD APP</span>
         </button>
         <p className="mt-1.5 px-1 text-[10px] leading-relaxed text-muted-foreground">
           Exports a real Expo / React Native project you can build into an
