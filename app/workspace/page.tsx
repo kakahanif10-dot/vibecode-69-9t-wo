@@ -194,6 +194,17 @@ export default function WorkspacePage() {
     void runGenerate(`${base}. Also ${rec.append}.`, `Please add: ${rec.label}`)
   }
 
+  // Universal App Input — industry quick-action seeds run generation directly.
+  const handleIndustry = (seed: string) => {
+    setPrompt('')
+    void runGenerate(seed, seed)
+  }
+
+  // Editable App Name / Brand field — live-updates the active spec.
+  const handleAppNameChange = (name: string) => {
+    setSpec((s) => ({ ...s, appName: name }))
+  }
+
   const handleExport = () => {
     if (spec.hasContent) downloadSourceZip(spec)
   }
@@ -304,6 +315,12 @@ export default function WorkspacePage() {
             onToggle={() => setDrawerOpen((o) => !o)}
             onApplyAccent={applyAccent}
             disabled={!spec.hasContent || generating}
+            prompt={prompt}
+            onPromptChange={setPrompt}
+            onGenerate={handleGenerate}
+            onIndustry={handleIndustry}
+            onAppNameChange={handleAppNameChange}
+            generating={generating}
           />
         </div>
       </div>
