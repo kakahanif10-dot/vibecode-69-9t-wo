@@ -6,21 +6,20 @@ import {
   Wand2,
   Download,
   Check,
-  Palette,
-  LayoutTemplate,
   Building2,
   AlertCircle,
+  Compass,
+  Palette as PaletteIcon,
 } from 'lucide-react'
 import { usePwaInstall } from '@/lib/use-pwa-install'
-import {
-  APP_TYPE_OPTIONS,
-  COLOR_SCHEME_OPTIONS,
-  PALETTES,
-  type AppType,
-  type ColorScheme,
-  type DesignSpec,
-} from '@/lib/design'
+import { TEMPLATE_LABELS, type DesignSpec } from '@/lib/design'
 import { cn } from '@/lib/utils'
+
+const EXAMPLES = [
+  'Aplikasi SAMSAT online untuk cek dan bayar pajak kendaraan',
+  'A cozy neighborhood coffee shop with menu and delivery',
+  'A fashion e-commerce store with cart and checkout',
+]
 
 export function PromptMenu({
   prompt,
@@ -59,11 +58,18 @@ export function PromptMenu({
     }
   }
 
+  const swatches: { key: keyof DesignSpec['palette']; label: string }[] = [
+    { key: 'bg', label: 'Background' },
+    { key: 'surface', label: 'Surface' },
+    { key: 'accent', label: 'Accent' },
+    { key: 'text', label: 'Text' },
+  ]
+
   return (
     <div className="thin-scroll flex h-full flex-col overflow-y-auto">
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-sm font-medium">
         <Sparkles className="h-4 w-4" />
-        Universal App Settings
+        Context-Aware Engine
       </div>
 
       <div className="flex-1 space-y-6 px-4 py-5">
@@ -73,7 +79,7 @@ export function PromptMenu({
             htmlFor="l3-prompt"
             className="text-xs font-medium uppercase tracking-wide text-muted-foreground"
           >
-            Describe your design
+            Describe any app
           </label>
           <div className="glow-border rounded-xl border border-border bg-card/70">
             <textarea
@@ -92,74 +98,71 @@ export function PromptMenu({
                 }
               }}
               rows={4}
-              placeholder="e.g. A student portal for Nusantara University with class schedules, grades and campus news."
+              placeholder="e.g. Aplikasi SAMSAT online untuk cek status pajak, unggah STNK/KTP, dan bayar pajak kendaraan."
               className="w-full resize-none bg-transparent p-3 text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none"
             />
           </div>
           <p className="text-[11px] text-muted-foreground">
             Press{' '}
-            <kbd className="rounded border border-border bg-secondary px-1">
-              ⌘/Ctrl
-            </kbd>{' '}
-            + <kbd className="rounded border border-border bg-secondary px-1">
-              Enter
-            </kbd>{' '}
-            to generate.
+            <kbd className="rounded border border-border bg-secondary px-1">⌘/Ctrl</kbd>{' '}
+            + <kbd className="rounded border border-border bg-secondary px-1">Enter</kbd> to
+            generate.
           </p>
         </section>
 
-        {/* App type */}
+        {/* Quick examples */}
         <section className="space-y-2">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <LayoutTemplate className="h-3.5 w-3.5" /> Application type
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Try an industry
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            {APP_TYPE_OPTIONS.map((opt) => (
+          <div className="flex flex-col gap-1.5">
+            {EXAMPLES.map((ex) => (
               <button
-                key={opt.value}
-                onClick={() => onPatch({ appType: opt.value as AppType })}
-                className={cn(
-                  'rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                  spec.appType === opt.value
-                    ? 'border-foreground bg-foreground text-background'
-                    : 'border-border text-muted-foreground hover:text-foreground',
-                )}
+                key={ex}
+                onClick={() => onPromptChange(ex)}
+                className="rounded-lg border border-border bg-card/50 px-3 py-2 text-left text-[11px] text-muted-foreground transition-colors hover:text-foreground"
               >
-                {opt.label}
+                {ex}
               </button>
             ))}
           </div>
         </section>
 
-        {/* Color scheme */}
+        {/* Detected context (auto — read only) */}
         <section className="space-y-2">
           <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            <Palette className="h-3.5 w-3.5" /> UI color scheme
+            <Compass className="h-3.5 w-3.5" /> Detected context
           </p>
           <div className="grid grid-cols-2 gap-2">
-            {COLOR_SCHEME_OPTIONS.map((opt) => {
-              const active = spec.colorScheme === opt.value
-              return (
-                <button
-                  key={opt.value}
-                  onClick={() =>
-                    onPatch({ colorScheme: opt.value as ColorScheme })
-                  }
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium transition-colors',
-                    active
-                      ? 'border-foreground text-foreground'
-                      : 'border-border text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <span
-                    className="h-3.5 w-3.5 shrink-0 rounded-full ring-1 ring-white/15"
-                    style={{ backgroundColor: PALETTES[opt.value].swatch }}
-                  />
-                  <span className="truncate">{opt.label}</span>
-                </button>
-              )
-            })}
+            <InfoTile label="Industry" value={spec.hasContent ? spec.industry : '—'} />
+            <InfoTile
+              label="Template"
+              value={spec.hasContent ? TEMPLATE_LABELS[spec.template] : '—'}
+            />
+          </div>
+          <p className="text-[10px] leading-relaxed text-muted-foreground">
+            The engine analyzes your prompt and auto-selects branding, layout, and a
+            functional multi-page flow for the matched industry.
+          </p>
+        </section>
+
+        {/* Palette preview (auto) */}
+        <section className="space-y-2">
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <PaletteIcon className="h-3.5 w-3.5" /> Generated palette
+          </p>
+          <div className="grid grid-cols-4 gap-2">
+            {swatches.map((s) => (
+              <div key={s.key} className="space-y-1">
+                <span
+                  className="block h-8 w-full rounded-lg ring-1 ring-white/10"
+                  style={{ backgroundColor: spec.palette[s.key] }}
+                />
+                <span className="block truncate text-[9px] text-muted-foreground">
+                  {s.label}
+                </span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -171,11 +174,9 @@ export function PromptMenu({
           <input
             value={spec.hasContent ? spec.appName : ''}
             maxLength={22}
-            onChange={(e) =>
-              onPatch({ appName: e.target.value, hasContent: true })
-            }
+            onChange={(e) => onPatch({ appName: e.target.value, hasContent: true })}
             className="w-full rounded-lg border border-border bg-card/70 px-3 py-2 text-sm focus:border-foreground/40 focus:outline-none"
-            placeholder="e.g. Nusantara University"
+            placeholder="Auto-generated after you generate"
           />
         </section>
 
@@ -218,6 +219,15 @@ export function PromptMenu({
           </p>
         )}
       </div>
+    </div>
+  )
+}
+
+function InfoTile({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-border bg-card/60 px-3 py-2">
+      <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="truncate text-[12px] font-semibold">{value}</p>
     </div>
   )
 }

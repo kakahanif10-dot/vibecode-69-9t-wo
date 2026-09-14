@@ -1,49 +1,9 @@
-export type AppType = 'mobile' | 'saas' | 'landing' | 'ecommerce'
-export type ColorScheme =
-  | 'monochrome'
-  | 'cyberpunk'
-  | 'enterprise'
-  | 'emerald'
+// VIBECODE INC. — Universal Context-Aware UI/UX design model.
+// A single generation returns an industry-aware spec: the AI detects the
+// industry from the prompt, picks a functional multi-page `template`, and
+// emits a matching hex `palette` + an industry-specific `catalog`.
 
-export type DesignSpec = {
-  appName: string
-  appType: AppType
-  colorScheme: ColorScheme
-  tagline: string
-  description: string
-  features: string[]
-  primaryAction: string
-  // false = neutral "awaiting blueprint" state (nothing generated yet)
-  hasContent: boolean
-}
-
-export const DEFAULT_SPEC: DesignSpec = {
-  appName: 'VIBECODE INC.',
-  appType: 'mobile',
-  colorScheme: 'monochrome',
-  tagline: '',
-  description: '',
-  features: [],
-  primaryAction: '',
-  hasContent: false,
-}
-
-export const APP_TYPE_OPTIONS: { value: AppType; label: string }[] = [
-  { value: 'mobile', label: 'Mobile App (APK)' },
-  { value: 'saas', label: 'SaaS Dashboard (Web)' },
-  { value: 'landing', label: 'Landing Page' },
-  { value: 'ecommerce', label: 'E-Commerce Website' },
-]
-
-export const COLOR_SCHEME_OPTIONS: {
-  value: ColorScheme
-  label: string
-}[] = [
-  { value: 'monochrome', label: 'Minimal Monochrome' },
-  { value: 'cyberpunk', label: 'Cyberpunk Neon' },
-  { value: 'enterprise', label: 'Enterprise Blue' },
-  { value: 'emerald', label: 'Emerald Nature' },
-]
+export type Template = 'government' | 'food' | 'ecommerce' | 'generic'
 
 export type Palette = {
   bg: string
@@ -53,48 +13,99 @@ export type Palette = {
   muted: string
   accent: string
   accentText: string
-  swatch: string
 }
 
-export const PALETTES: Record<ColorScheme, Palette> = {
-  monochrome: {
+// One row in the industry catalog: a menu item, a product, or a public service.
+export type CatalogItem = {
+  name: string
+  price: number // currency amount (0 = free / not priced)
+  meta: string // category, subtitle or short descriptor
+}
+
+export type DesignSpec = {
+  appName: string
+  industry: string // human label of the detected industry, e.g. "Government / Tax"
+  template: Template // drives which interactive multi-page UI renders
+  palette: Palette // industry-appropriate colors (hex)
+  currency: string // symbol prefixing prices, e.g. "Rp", "$"
+  tagline: string
+  description: string
+  primaryAction: string
+  categories: string[] // filter chips / quick sections (up to 5)
+  catalog: CatalogItem[] // menu items / products / services (up to 6)
+  hasContent: boolean // false = neutral "awaiting blueprint" state
+}
+
+// Strong, industry-appropriate palette defaults per template. The AI may
+// override individual hex values; anything invalid falls back to these so the
+// preview is always coherent for the detected industry.
+export const TEMPLATE_PALETTES: Record<Template, Palette> = {
+  // Institutional: navy authority + steel + orange tax-warning accent.
+  government: {
+    bg: '#0a1626',
+    surface: '#12253c',
+    border: 'rgba(148,163,184,0.20)',
+    text: '#eaf1f9',
+    muted: '#93a7c4',
+    accent: '#f97316',
+    accentText: '#0a1626',
+  },
+  // Warm earth tones: espresso, cream, forest green.
+  food: {
+    bg: '#1b130d',
+    surface: '#291d14',
+    border: 'rgba(206,170,124,0.22)',
+    text: '#f4e9dd',
+    muted: '#c2a988',
+    accent: '#3f9c5f',
+    accentText: '#04140b',
+  },
+  // Bright, high-conversion marketplace energy (Shopee/Amazon-like).
+  ecommerce: {
+    bg: '#0e1421',
+    surface: '#1a2333',
+    border: 'rgba(255,255,255,0.10)',
+    text: '#f6f8fc',
+    muted: '#9fb0cc',
+    accent: '#ff5a1f',
+    accentText: '#ffffff',
+  },
+  // Neutral fallback for anything else.
+  generic: {
     bg: '#0a0a0a',
     surface: '#171717',
     border: 'rgba(255,255,255,0.10)',
     text: '#fafafa',
     muted: '#a3a3a3',
-    accent: '#fafafa',
-    accentText: '#0a0a0a',
-    swatch: '#e5e5e5',
-  },
-  cyberpunk: {
-    bg: '#0a0613',
-    surface: '#170d28',
-    border: 'rgba(255,64,196,0.22)',
-    text: '#f4e9ff',
-    muted: '#b28fe0',
-    accent: '#ff2fb9',
-    accentText: '#0a0613',
-    swatch: '#ff2fb9',
-  },
-  enterprise: {
-    bg: '#0b1220',
-    surface: '#131f36',
-    border: 'rgba(147,197,253,0.18)',
-    text: '#eef2ff',
-    muted: '#93a4c4',
-    accent: '#3b82f6',
+    accent: '#6366f1',
     accentText: '#ffffff',
-    swatch: '#3b82f6',
   },
-  emerald: {
-    bg: '#061410',
-    surface: '#0d241b',
-    border: 'rgba(52,211,153,0.20)',
-    text: '#e7f6ee',
-    muted: '#84c3a4',
-    accent: '#10b981',
-    accentText: '#04140d',
-    swatch: '#10b981',
-  },
+}
+
+export const TEMPLATES: readonly Template[] = [
+  'government',
+  'food',
+  'ecommerce',
+  'generic',
+] as const
+
+export const TEMPLATE_LABELS: Record<Template, string> = {
+  government: 'Government / Public Service',
+  food: 'Food & Beverage',
+  ecommerce: 'E-Commerce / Marketplace',
+  generic: 'Universal App',
+}
+
+export const DEFAULT_SPEC: DesignSpec = {
+  appName: 'VIBECODE INC.',
+  industry: '',
+  template: 'generic',
+  palette: TEMPLATE_PALETTES.generic,
+  currency: '$',
+  tagline: '',
+  description: '',
+  primaryAction: '',
+  categories: [],
+  catalog: [],
+  hasContent: false,
 }
