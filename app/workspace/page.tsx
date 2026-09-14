@@ -192,7 +192,7 @@ export default function WorkspacePage() {
               Universal Context-Aware Engine
             </span>
             <span className="rounded-full border border-border bg-card/60 px-2.5 py-1 font-mono">
-              gemini-flash-latest
+              gemini-3.5-flash · AI Gateway
             </span>
           </div>
         </header>
