@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Wifi, Signal, BatteryFull, X } from 'lucide-react'
 import { AppPreview } from '@/components/workspace/app-preview'
@@ -21,10 +22,23 @@ export function PhoneSimulator({
   attachment?: string | null
   onClearAttachment?: () => void
 }) {
-  const now = new Date().toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+  // Render the clock only after mount. The current time depends on the
+  // viewer's timezone/locale, so computing it during SSR produces markup that
+  // won't match the client and triggers a hydration mismatch.
+  const [now, setNow] = useState('')
+
+  useEffect(() => {
+    const format = () =>
+      setNow(
+        new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      )
+    format()
+    const id = setInterval(format, 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   return (
     <div className="flex h-full items-center justify-center p-6">
