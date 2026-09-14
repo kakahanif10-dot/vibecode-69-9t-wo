@@ -2,9 +2,10 @@
 // Detects the industry from any prompt (any language) and emits an
 // industry-aware app spec: functional multi-page template + matching palette
 // + industry-specific catalog. Rendered 100% client-side (0 MB server storage).
-// The reasoning core runs on the AI SDK over the Vercel AI Gateway (zero-config).
+// The reasoning core runs on the AI SDK with Google Gemini.
 
 import { generateText } from 'ai'
+import { google } from '@ai-sdk/google'
 import {
   TEMPLATE_PALETTES,
   TEMPLATES,
@@ -16,12 +17,12 @@ import {
 
 export const maxDuration = 60
 
-// Reasoning core runs on the AI SDK over the Vercel AI Gateway (zero-config in
-// v0 previews and Vercel deployments — no provider key or card required, auth is
-// supplied automatically). Models are referenced with plain `provider/model` IDs.
-const MODEL = 'google/gemini-3.5-flash'
+// Reasoning core runs on the AI SDK with Google Gemini, authenticated via the
+// GOOGLE_GENERATIVE_AI_API_KEY environment variable (read automatically by the
+// @ai-sdk/google provider).
+const MODEL = 'gemini-3.5-flash'
 // Ordered fallbacks tried when the primary model is overloaded or rate-limited.
-const MODEL_FALLBACKS = ['google/gemini-3.5-flash', 'google/gemini-2.5-flash'] as const
+const MODEL_FALLBACKS = ['gemini-3.5-flash', 'gemini-2.5-flash'] as const
 
 const SYSTEM_INSTRUCTION = `You are the Universal Context-Aware UI/UX Engine for Vibecode Inc., reasoning like a senior product designer with 10 years of experience.
 The user describes ANY software product in ANY language (SAMSAT / government tax portal, a coffee shop, a restaurant, an online store, a clinic, a SaaS tool, etc.).
@@ -201,7 +202,7 @@ function toCatalog(value: unknown, template: Template): CatalogItem[] {
 
 class OverloadedError extends Error {}
 
-// Run the reasoning core through the AI SDK + Vercel AI Gateway, falling back
+// Run the reasoning core through the AI SDK + Google Gemini, falling back
 // across models when the primary is overloaded/rate-limited. The system prompt
 // asks for a single JSON object; the raw text is validated downstream.
 async function callEngine(userPrompt: string): Promise<string> {
@@ -209,7 +210,7 @@ async function callEngine(userPrompt: string): Promise<string> {
   for (const model of MODEL_FALLBACKS) {
     try {
       const { text } = await generateText({
-        model,
+        model: google(model),
         system: SYSTEM_INSTRUCTION,
         prompt: userPrompt,
         temperature: 0.7,
