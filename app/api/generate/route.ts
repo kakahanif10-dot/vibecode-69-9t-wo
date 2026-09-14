@@ -23,7 +23,7 @@ const MODEL = 'google/gemini-2.5-flash'
 // Ordered fallbacks tried when the primary model is overloaded or rate-limited.
 const MODEL_FALLBACKS = ['google/gemini-2.5-flash', 'google/gemini-2.0-flash'] as const
 
-const SYSTEM_INSTRUCTION = `You are the Universal Context-Aware UI/UX Engine for Vibecode Inc., reasoning like a 10-year Senior Solutions Architect.
+const SYSTEM_INSTRUCTION = `You are the Universal Context-Aware UI/UX Engine for Vibecode Inc. — an elite 10-year Senior Full-Stack Product Architect whose reasoning rigor is on par with ChatGPT Enterprise and Gemini Advanced. You are 100% compliant, hyper-reactive, and you follow the user's explicit intent from first principles. You are FORBIDDEN from hallucinating and FORBIDDEN from returning a generic, static, or template-biased placeholder: every field must be reasoned dynamically from the exact application name or industry vertical the user provides (e-commerce, government, university, culinary, fintech, health, etc.). Emit raw, production-grade data only — no markdown, no code fences, no chat fluff.
 
 ABSOLUTE COMPLIANCE CONTRACT (non-negotiable):
 1. Follow the user's EXACT prompt intent. The generated app MUST be about the specific product/institution the user named — never a generic, unrelated, or template-biased app.
@@ -62,6 +62,31 @@ TEMPLATE RULES (pick the best fit):
 - "generic": anything else. Clean neutral palette with a confident accent. Catalog rows = key features/screens (price 0, meta = short benefit). Categories = sections.
 
 Choose colors that genuinely match the brand psychology of the detected industry. Keep every string concise so it renders inside a phone preview.`
+
+// Few-shot pattern-matching anchors. Each pair shows the runtime how ONE context
+// token maps directly to a dense, operational, industry-accurate spec in the
+// exact minified-JSON schema above. Priming with these forces production-grade
+// depth and kills generic/placeholder drift before the real prompt is appended.
+const FEW_SHOT: { role: 'user' | 'assistant'; content: string }[] = [
+  {
+    role: 'user',
+    content: 'shopee',
+  },
+  {
+    role: 'assistant',
+    content:
+      '{"appName":"Shopee","industry":"E-Commerce / Marketplace","template":"ecommerce","currency":"Rp","tagline":"Gratis Ongkir Setiap Hari","description":"An everything-marketplace to browse deals, fill your cart, and check out in seconds.","primaryAction":"Add to cart","palette":{"bg":"#F5F5F5","surface":"#FFFFFF","text":"#212121","muted":"#757575","accent":"#EE4D2D","accentText":"#FFFFFF"},"categories":["Flash Sale","Gadget","Fashion","Groceries","Top Up"],"catalog":[{"name":"TWS Bluetooth Earbuds","price":89000,"meta":"Terjual 10rb+"},{"name":"Smartwatch Sport","price":215000,"meta":"Star Seller"},{"name":"Uniqlo Airism Tee","price":129000,"meta":"Official Store"},{"name":"Kopi Kapsul 20pcs","price":54900,"meta":"Flash Sale"}]}',
+  },
+  {
+    role: 'user',
+    content: 'aplikasi pajak kendaraan samsat',
+  },
+  {
+    role: 'assistant',
+    content:
+      '{"appName":"e-SAMSAT","industry":"Government / Vehicle Tax","template":"government","currency":"Rp","tagline":"Bayar pajak kendaraan tanpa antre","description":"An official public-service portal to check and settle vehicle tax and permits online.","primaryAction":"Bayar Pajak","palette":{"bg":"#0A192F","surface":"#112240","text":"#E6F1FF","muted":"#8892B0","accent":"#FF6B00","accentText":"#0A192F"},"categories":["Pajak Tahunan","Perpanjang STNK","Balik Nama","Denda"],"catalog":[{"name":"PKB Tahunan (B 1234 XYZ)","price":1250000,"meta":"Jatuh tempo 12 hari"},{"name":"Perpanjangan STNK","price":350000,"meta":"Aktif"},{"name":"Denda Keterlambatan","price":75000,"meta":"Belum lunas"},{"name":"Balik Nama Kendaraan","price":500000,"meta":"Tersedia"}]}',
+  },
+]
 
 function extractJson(raw: string): Record<string, unknown> | null {
   const cleaned = raw
@@ -381,8 +406,17 @@ async function callEngine(userPrompt: string): Promise<string> {
         // Plain "provider/model" Gateway ID — zero-config auth in v0/Vercel.
         model,
         system: SYSTEM_INSTRUCTION,
-        prompt: userPrompt,
-        temperature: 0.7,
+        // Few-shot anchors are prepended to the conversation immediately before
+        // the live user payload so the runtime mimics production-grade depth.
+        messages: [
+          ...FEW_SHOT,
+          { role: 'user', content: userPrompt },
+        ],
+        // Low-temperature constraint: prune creative drift, force rigid, cold
+        // reasoning so output stays grounded in the exact prompt.
+        temperature: 0.1,
+        topP: 0.95,
+        maxOutputTokens: 8192,
       })
       if (text?.trim()) return text
       lastError = new Error(`Model "${model}" returned an empty response`)
