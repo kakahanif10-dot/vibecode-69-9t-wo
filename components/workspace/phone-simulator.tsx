@@ -16,11 +16,13 @@ export function PhoneSimulator({
   building,
   attachment,
   onClearAttachment,
+  onEdit,
 }: {
   spec: DesignSpec
   building: boolean
   attachment?: string | null
   onClearAttachment?: () => void
+  onEdit?: (updater: (s: DesignSpec) => DesignSpec) => void
 }) {
   // Render the clock only after mount. The current time depends on the
   // viewer's timezone/locale, so computing it during SSR produces markup that
@@ -96,7 +98,7 @@ export function PhoneSimulator({
                 <p className="text-xs text-white/70">Compiling your app…</p>
               </motion.div>
             )}
-            <AppPreview spec={spec} />
+            <AppPreview spec={spec} onEdit={onEdit} />
           </div>
 
           {/* Nav pill */}

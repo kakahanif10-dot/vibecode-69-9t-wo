@@ -1,6 +1,13 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Bell,
@@ -35,6 +42,160 @@ import {
   GraduationCap,
 } from 'lucide-react'
 import type { CatalogItem, DesignSpec, Palette, Template } from '@/lib/design'
+import { cn } from '@/lib/utils'
+
+/* ------------------------------------------------------------------ */
+/* Inline click-to-edit — makes the live preview's text editable        */
+/* ------------------------------------------------------------------ */
+
+// A spec editor threaded through context so any nested preview node can commit
+// an edit without prop-drilling. When it's null, the preview is read-only.
+type SpecEditor = (updater: (s: DesignSpec) => DesignSpec) => void
+const EditContext = createContext<SpecEditor | null>(null)
+
+/**
+ * Renders `value` as normal text; when editing is enabled (an editor is present
+ * in context) it becomes click-to-edit. Enter/blur commits, Escape cancels.
+ * `numeric` parses the draft as a number before committing.
+ */
+function EditableText({
+  value,
+  commit,
+  className,
+  style,
+  multiline = false,
+  numeric = false,
+  ariaLabel,
+}: {
+  value: string
+  commit: (editor: SpecEditor, next: string) => void
+  className?: string
+  style?: React.CSSProperties
+  multiline?: boolean
+  numeric?: boolean
+  ariaLabel?: string
+}) {
+  const editor = useContext(EditContext)
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(value)
+
+  useEffect(() => {
+    if (!editing) setDraft(value)
+  }, [value, editing])
+
+  if (!editor) {
+    return (
+      <span className={className} style={style}>
+        {value}
+      </span>
+    )
+  }
+
+  const save = () => {
+    setEditing(false)
+    const next = draft.trim()
+    if (next && next !== value) commit(editor, next)
+    else setDraft(value)
+  }
+
+  if (editing) {
+    const shared = {
+      autoFocus: true,
+      value: draft,
+      onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+        setDraft(e.target.value),
+      onBlur: save,
+      onFocus: (e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+        e.currentTarget.select(),
+      className: cn(
+        'w-full rounded bg-black/25 px-1 outline-none ring-1 ring-white/50',
+        className,
+      ),
+      style,
+      'aria-label': ariaLabel,
+    }
+    if (multiline) {
+      return (
+        <textarea
+          {...shared}
+          rows={2}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              setDraft(value)
+              setEditing(false)
+            }
+          }}
+        />
+      )
+    }
+    return (
+      <input
+        {...shared}
+        inputMode={numeric ? 'decimal' : undefined}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            save()
+          } else if (e.key === 'Escape') {
+            setDraft(value)
+            setEditing(false)
+          }
+        }}
+      />
+    )
+  }
+
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-label={ariaLabel ?? `Edit ${value}`}
+      onClick={() => {
+        setDraft(value)
+        setEditing(true)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          setDraft(value)
+          setEditing(true)
+        }
+      }}
+      className={cn(
+        'cursor-text rounded px-0.5 outline-dashed outline-1 outline-transparent transition-colors hover:bg-white/10 hover:outline-current/40',
+        className,
+      )}
+      style={style}
+    >
+      {value}
+    </span>
+  )
+}
+
+// Commit helpers for the top-level, single-value spec fields.
+const setField =
+  (key: 'appName' | 'tagline' | 'description' | 'primaryAction') =>
+  (editor: SpecEditor, next: string) =>
+    editor((s) => ({ ...s, [key]: next }))
+
+// Commit helper for one catalog row's editable field.
+const setCatalog =
+  (index: number, key: 'name' | 'meta' | 'price') =>
+  (editor: SpecEditor, next: string) =>
+    editor((s) => ({
+      ...s,
+      catalog: s.catalog.map((row, i) =>
+        i === index
+          ? {
+              ...row,
+              [key]:
+                key === 'price'
+                  ? Math.max(0, Math.round((Number(next.replace(/[^0-9.]/g, '')) || 0) * 100) / 100)
+                  : next,
+            }
+          : row,
+      ),
+    }))
 
 /* ------------------------------------------------------------------ */
 /* Automatic psychological brand emblem per detected industry          */
@@ -85,9 +246,19 @@ function BrandMark({
  * industry (spec.template), so the device preview reflects whatever the
  * Context-Aware Engine returns.
  */
-export function AppPreview({ spec }: { spec: DesignSpec }) {
+export function AppPreview({
+  spec,
+  onEdit,
+}: {
+  spec: DesignSpec
+  onEdit?: SpecEditor
+}) {
   if (!spec.hasContent) return <AwaitingState />
-  return <InteractiveApp spec={spec} />
+  return (
+    <EditContext.Provider value={onEdit ?? null}>
+      <InteractiveApp spec={spec} />
+    </EditContext.Provider>
+  )
 }
 
 function formatPrice(currency: string, price: number) {
@@ -290,7 +461,11 @@ function AppHeader({
         <BrandMark spec={spec} />
         <div className="min-w-0">
           <p className="truncate text-[13px] font-semibold leading-tight">
-            {spec.appName}
+            <EditableText
+              value={spec.appName}
+              commit={setField('appName')}
+              ariaLabel="Edit app name"
+            />
           </p>
           <p className="truncate text-[9px] leading-tight" style={{ color: p.muted }}>
             {spec.industry}
@@ -410,9 +585,21 @@ function CatalogPage({
   return (
     <div className="space-y-3 px-4 py-3">
       <div>
-        <p className="text-base font-bold leading-tight text-balance">{spec.tagline}</p>
+        <p className="text-base font-bold leading-tight text-balance">
+          <EditableText
+            value={spec.tagline}
+            commit={setField('tagline')}
+            multiline
+            ariaLabel="Edit tagline"
+          />
+        </p>
         <p className="mt-0.5 text-[10px] leading-relaxed" style={{ color: p.muted }}>
-          {spec.description}
+          <EditableText
+            value={spec.description}
+            commit={setField('description')}
+            multiline
+            ariaLabel="Edit description"
+          />
         </p>
       </div>
 
@@ -517,22 +704,29 @@ function ProductCard({
         )}
       </div>
       <div className="flex flex-1 flex-col gap-1 px-2.5 py-2">
-        <p className="truncate text-[11px] font-semibold leading-tight">{item.name}</p>
-        {item.meta && (
-          <p className="truncate text-[9px] leading-tight" style={{ color: p.muted }}>
-            {item.meta}
-          </p>
-        )}
+        <p className="truncate text-[11px] font-semibold leading-tight">
+          <EditableText
+            value={item.name}
+            commit={setCatalog(index, 'name')}
+            ariaLabel="Edit item name"
+          />
+        </p>
+        <p className="truncate text-[9px] leading-tight" style={{ color: p.muted }}>
+          <EditableText
+            value={item.meta || 'Add detail'}
+            commit={setCatalog(index, 'meta')}
+            ariaLabel="Edit item detail"
+          />
+        </p>
         <div className="mt-auto flex items-center justify-between pt-1">
-          {item.price > 0 ? (
-            <span className="text-[11px] font-bold" style={{ color: p.accent }}>
-              {formatPrice(spec.currency, item.price)}
-            </span>
-          ) : (
-            <span className="text-[10px]" style={{ color: p.muted }}>
-              Included
-            </span>
-          )}
+          <span className="text-[11px] font-bold" style={{ color: p.accent }}>
+            <EditableText
+              value={item.price > 0 ? formatPrice(spec.currency, item.price) : 'Included'}
+              commit={setCatalog(index, 'price')}
+              numeric
+              ariaLabel="Edit item price"
+            />
+          </span>
           {qty === 0 ? (
             <button
               onClick={onAdd}
