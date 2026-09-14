@@ -91,10 +91,12 @@ export function recommendationsFor(spec: DesignSpec): Recommendation[] {
 // the detected vertical and offers exactly three algorithmic suggestions.
 export function introMessage(spec: DesignSpec): string {
   const recs = recommendationsFor(spec)
-  const label = spec.industry || TEMPLATE_LABELS[spec.template]
+  const label = (spec.industry || TEMPLATE_LABELS[spec.template]).toLowerCase()
+  const name = spec.appName ? `“${spec.appName}”` : `your ${label} app`
   return (
-    `I have successfully generated your ${label} with localized styling and a functional multi-page flow. ` +
-    `Would you like to inject: 1. ${recs[0].label}, 2. ${recs[1].label}, or 3. ${recs[2].label}?`
+    `Alright, ${name} is live in the preview — go ahead and click around, it's fully interactive. ` +
+    `Oh, and every piece of text is editable: just click any label, price, or button in the preview to rename it on the spot. ` +
+    `Want to take it further? I could wire up ${recs[0].label.toLowerCase()}, ${recs[1].label.toLowerCase()}, or ${recs[2].label.toLowerCase()} — or just tell me what's on your mind.`
   )
 }
 

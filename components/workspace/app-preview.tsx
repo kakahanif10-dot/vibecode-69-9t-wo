@@ -1164,9 +1164,20 @@ function TaxHomePage({ spec, goCart }: { spec: DesignSpec; goCart: () => void })
       >
         <p className="text-[10px] font-medium opacity-80">Outstanding tax</p>
         <p className="text-xl font-black leading-tight">
-          {formatPrice(spec.currency, spec.catalog[0]?.price ?? 0)}
+          <EditableText
+            value={formatPrice(spec.currency, spec.catalog[0]?.price ?? 0)}
+            commit={setCatalog(0, 'price')}
+            numeric
+            ariaLabel="Edit outstanding tax amount"
+          />
         </p>
-        <p className="mt-0.5 text-[9px] opacity-80">{spec.catalog[0]?.meta ?? 'Due soon'}</p>
+        <p className="mt-0.5 text-[9px] opacity-80">
+          <EditableText
+            value={spec.catalog[0]?.meta ?? 'Due soon'}
+            commit={setCatalog(0, 'meta')}
+            ariaLabel="Edit tax due detail"
+          />
+        </p>
       </div>
 
       {/* Plate number calculator */}
@@ -1247,13 +1258,28 @@ function TaxHomePage({ spec, goCart }: { spec: DesignSpec; goCart: () => void })
                 <FileText className="h-4 w-4" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[11px] font-semibold">{item.name}</p>
+                <p className="truncate text-[11px] font-semibold">
+                  <EditableText
+                    value={item.name}
+                    commit={setCatalog(i, 'name')}
+                    ariaLabel="Edit service name"
+                  />
+                </p>
                 <p className="text-[9px]" style={{ color: p.muted }}>
-                  {item.meta}
+                  <EditableText
+                    value={item.meta || 'Add detail'}
+                    commit={setCatalog(i, 'meta')}
+                    ariaLabel="Edit service detail"
+                  />
                 </p>
               </div>
               <span className="text-[11px] font-bold" style={{ color: p.accent }}>
-                {formatPrice(spec.currency, item.price)}
+                <EditableText
+                  value={formatPrice(spec.currency, item.price)}
+                  commit={setCatalog(i, 'price')}
+                  numeric
+                  ariaLabel="Edit service price"
+                />
               </span>
             </div>
           ))}
