@@ -19,9 +19,9 @@ export const maxDuration = 60
 // Reasoning core runs on the AI SDK through the Vercel AI Gateway, which is
 // zero-config in v0 previews and Vercel deployments (no provider API key). We
 // pass plain "provider/model" Gateway IDs straight to generateText.
-const MODEL = 'google/gemini-3-flash'
+const MODEL = 'google/gemini-2.5-flash'
 // Ordered fallbacks tried when the primary model is overloaded or rate-limited.
-const MODEL_FALLBACKS = ['google/gemini-3-flash', 'google/gemini-2.5-flash'] as const
+const MODEL_FALLBACKS = ['google/gemini-2.5-flash', 'google/gemini-2.0-flash'] as const
 
 const SYSTEM_INSTRUCTION = `You are the Universal Context-Aware UI/UX Engine for Vibecode Inc., reasoning like a senior product designer with 10 years of experience.
 The user describes ANY software product in ANY language (SAMSAT / government tax portal, a coffee shop, a restaurant, an online store, a clinic, a SaaS tool, etc.).
@@ -201,6 +201,170 @@ function toCatalog(value: unknown, template: Template): CatalogItem[] {
 
 class OverloadedError extends Error {}
 
+// ---------------------------------------------------------------------------
+// Local, deterministic reasoning fallback.
+// When the AI Gateway is unavailable (no funded card, rate limit, network),
+// we still return a coherent, industry-aware spec by classifying the prompt
+// with weighted multilingual keyword matching. Nothing here is random: the
+// same prompt always yields the same branded app.
+// ---------------------------------------------------------------------------
+
+// Keyword sets per template, spanning English + Indonesian so prompts like
+// "aplikasi pajak kendaraan" or "toko online" classify correctly.
+const TEMPLATE_KEYWORDS: Record<Exclude<Template, 'generic'>, string[]> = {
+  government: [
+    'samsat', 'pajak', 'tax', 'government', 'pemerintah', 'permit', 'izin',
+    'license', 'lisensi', 'sim', 'ktp', 'passport', 'paspor', 'civic',
+    'public service', 'layanan publik', 'kendaraan', 'vehicle', 'denda', 'fine',
+    'retribusi', 'dukcapil', 'e-gov', 'municipal', 'kota', 'dinas',
+  ],
+  fintech: [
+    'bank', 'wallet', 'dompet', 'payment', 'pembayaran', 'invest', 'investasi',
+    'crypto', 'kripto', 'finance', 'keuangan', 'fintech', 'loan', 'pinjaman',
+    'saldo', 'balance', 'transfer', 'insurance', 'asuransi', 'trading', 'saham',
+    'stock', 'budgeting', 'tabungan', 'savings', 'e-money', 'cashless',
+  ],
+  edutech: [
+    'school', 'sekolah', 'university', 'universitas', 'course', 'kursus',
+    'learning', 'belajar', 'edu', 'education', 'pendidikan', 'lesson', 'pelajaran',
+    'tutor', 'les', 'student', 'siswa', 'mahasiswa', 'exam', 'ujian', 'quiz',
+    'bootcamp', 'training', 'pelatihan', 'academy', 'akademi', 'e-learning',
+  ],
+  food: [
+    'coffee', 'kopi', 'cafe', 'kafe', 'restaurant', 'restoran', 'food', 'makanan',
+    'menu', 'delivery', 'antar', 'kitchen', 'dapur', 'bakery', 'roti', 'drink',
+    'minuman', 'warung', 'catering', 'kuliner', 'snack', 'jajan', 'dessert',
+    'espresso', 'latte', 'pizza', 'burger', 'nasi', 'ayam', 'bar',
+  ],
+  ecommerce: [
+    'shop', 'toko', 'store', 'ecommerce', 'e-commerce', 'marketplace', 'retail',
+    'cart', 'keranjang', 'checkout', 'product', 'produk', 'fashion', 'clothing',
+    'baju', 'sepatu', 'shoes', 'gadget', 'elektronik', 'electronics', 'jual',
+    'sell', 'belanja', 'shopping', 'catalog', 'katalog', 'grosir', 'olshop',
+  ],
+  health: [
+    'clinic', 'klinik', 'hospital', 'rumah sakit', 'pharmacy', 'apotek',
+    'health', 'kesehatan', 'medical', 'medis', 'doctor', 'dokter', 'telemedicine',
+    'wellness', 'obat', 'medicine', 'appointment', 'janji', 'dental', 'gigi',
+    'therapy', 'terapi', 'patient', 'pasien', 'lab', 'vaksin', 'vaccine',
+  ],
+  saas: [
+    'saas', 'dashboard', 'analytics', 'productivity', 'produktivitas', 'crm',
+    'platform', 'b2b', 'workflow', 'automation', 'otomatisasi', 'project management',
+    'manajemen proyek', 'tool', 'software', 'aplikasi bisnis', 'team', 'tim',
+    'collaboration', 'kolaborasi', 'api', 'integration', 'integrasi', 'report',
+  ],
+}
+
+// Human app-name seeds and taglines per detected template.
+const HEURISTIC_BRANDING: Record<
+  Template,
+  { appName: string; industry: string; currency: string; tagline: string; description: string; primaryAction: string }
+> = {
+  government: {
+    appName: 'e-SAMSAT',
+    industry: 'Government / Vehicle Tax',
+    currency: 'Rp',
+    tagline: 'Bayar pajak kendaraan tanpa antre',
+    description: 'A trusted public-service portal to check and settle your vehicle tax and permits online.',
+    primaryAction: 'Bayar Pajak',
+  },
+  fintech: {
+    appName: 'Vault Pay',
+    industry: 'Fintech / Digital Wallet',
+    currency: 'Rp',
+    tagline: 'Your money, moving at your speed',
+    description: 'A secure digital wallet to hold balances, pay bills, and grow your savings in one place.',
+    primaryAction: 'Send money',
+  },
+  edutech: {
+    appName: 'LearnHub',
+    industry: 'EduTech / Online Courses',
+    currency: '$',
+    tagline: 'Learn anything, at your own pace',
+    description: 'A friendly learning platform with courses, lessons, and certificates for every level.',
+    primaryAction: 'Start learning',
+  },
+  food: {
+    appName: 'Brew & Co.',
+    industry: 'Food & Beverage',
+    currency: '$',
+    tagline: 'Freshly brewed, made for you',
+    description: 'A cozy spot to browse the menu, order ahead, and get it delivered warm to your door.',
+    primaryAction: 'Order now',
+  },
+  ecommerce: {
+    appName: 'ShopNest',
+    industry: 'E-Commerce / Marketplace',
+    currency: '$',
+    tagline: 'Everything you love, one tap away',
+    description: 'A bright online store to browse products, fill your cart, and check out in seconds.',
+    primaryAction: 'Add to cart',
+  },
+  health: {
+    appName: 'CareLink',
+    industry: 'Health / Telemedicine',
+    currency: 'Rp',
+    tagline: 'Care that comes to you',
+    description: 'Book consultations, order medicine, and manage your health from anywhere.',
+    primaryAction: 'Book visit',
+  },
+  saas: {
+    appName: 'FlowOps',
+    industry: 'SaaS / Productivity',
+    currency: '$',
+    tagline: 'Ship faster, together',
+    description: 'A modern workspace to plan projects, track work, and automate the busywork.',
+    primaryAction: 'Get started',
+  },
+  generic: {
+    appName: 'Vibecode App',
+    industry: 'Universal App',
+    currency: '$',
+    tagline: 'A clean, original product concept',
+    description: 'A clean, original product concept generated by Vibecode Inc.',
+    primaryAction: 'Get started',
+  },
+}
+
+// Classify the prompt into a template by counting weighted keyword hits.
+function classifyTemplate(prompt: string): Template {
+  const text = prompt.toLowerCase()
+  let best: Template = 'generic'
+  let bestScore = 0
+  for (const [template, keywords] of Object.entries(TEMPLATE_KEYWORDS)) {
+    let score = 0
+    for (const kw of keywords) {
+      if (text.includes(kw)) score += kw.includes(' ') ? 2 : 1
+    }
+    if (score > bestScore) {
+      bestScore = score
+      best = template as Template
+    }
+  }
+  return best
+}
+
+// Build a complete, coherent spec locally — reuses the same template palettes,
+// categories, and catalog rows the AI path validates against.
+function heuristicSpec(userPrompt: string): DesignSpec {
+  const template = classifyTemplate(userPrompt)
+  const brand = HEURISTIC_BRANDING[template]
+  return {
+    appName: brand.appName,
+    industry: brand.industry,
+    template,
+    palette: TEMPLATE_PALETTES[template],
+    currency: brand.currency,
+    tagline: brand.tagline,
+    description: brand.description,
+    primaryAction: brand.primaryAction,
+    categories: toCategories(undefined, template),
+    catalog: toCatalog(undefined, template),
+    hasContent: true,
+  }
+}
+
 // Run the reasoning core through the AI SDK + Google Gemini, falling back
 // across models when the primary is overloaded/rate-limited. The system prompt
 // asks for a single JSON object; the raw text is validated downstream.
@@ -209,7 +373,8 @@ async function callEngine(userPrompt: string): Promise<string> {
   for (const model of MODEL_FALLBACKS) {
     try {
       const { text } = await generateText({
-        model: google(model),
+        // Plain "provider/model" Gateway ID — zero-config auth in v0/Vercel.
+        model,
         system: SYSTEM_INSTRUCTION,
         prompt: userPrompt,
         temperature: 0.7,
@@ -246,16 +411,13 @@ export async function POST(req: Request) {
     )
   }
 
+  // Prefer real AI reasoning; if the Gateway is unavailable for any reason
+  // (no funded card, rate limit, network, malformed output) we degrade to the
+  // deterministic local engine so a generation ALWAYS succeeds.
   try {
     const text = await callEngine(userPrompt)
-
     const parsed = extractJson(text)
-    if (!parsed) {
-      return Response.json(
-        { success: false, error: 'Model did not return a valid app spec.' },
-        { status: 502 },
-      )
-    }
+    if (!parsed) throw new Error('Model did not return a valid app spec.')
 
     const template = pickEnum(parsed.template, TEMPLATES, 'generic')
     const appName = str(parsed.appName, 22, 'Untitled App')
@@ -282,22 +444,19 @@ export async function POST(req: Request) {
       success: true,
       company: 'Vibecode Inc.',
       model: MODEL,
+      engine: 'ai',
       spec,
     })
   } catch (error) {
-    if (error instanceof OverloadedError) {
-      return Response.json(
-        {
-          success: false,
-          error:
-            'The reasoning engine is experiencing high demand right now. This is temporary — please tap Generate again in a moment.',
-        },
-        { status: 503 },
-      )
-    }
-    return Response.json(
-      { success: false, error: (error as Error).message },
-      { status: 500 },
-    )
+    console.log('[v0] AI engine unavailable, using local fallback:', (error as Error)?.message)
+    // Deterministic local classification — never fails.
+    const spec = heuristicSpec(userPrompt)
+    return Response.json({
+      success: true,
+      company: 'Vibecode Inc.',
+      model: 'vibecode/local-heuristic',
+      engine: 'local',
+      spec,
+    })
   }
 }
